@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import { Product } from '@/lib/db/schema';
 
 export interface CartItem {
@@ -30,14 +31,16 @@ interface CartStore {
   getChangeDue: () => number;
 }
 
-export const useCartStore = create<CartStore>((set, get) => ({
-  items: [],
-  discount: 0,
-  paymentMethod: 'cash',
-  notes: '',
-  paidAmount: 0,
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      discount: 0,
+      paymentMethod: 'cash',
+      notes: '',
+      paidAmount: 0,
 
-  addItem: (product: Product, quantity = 1) => {
+      addItem: (product: Product, quantity = 1) => {
     set((state) => {
       const existingIndex = state.items.findIndex(
         (item) => item.product.id === product.id
@@ -129,4 +132,34 @@ export const useCartStore = create<CartStore>((set, get) => ({
     const total = get().getTotal();
     return Math.max(0, paidAmount - total);
   },
-}));
+}),
+    {
+      name: 'kstore-cart',
+      // Use localStorage with fallback to memory
+      storage: {
+        getItem: (name) => {
+          try {
+            const str = localStorage.getItem(name);
+            return str ? JSON.parse(str) : null;
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch {
+            // Silently fail if localStorage is unavailable
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {
+            // Silently fail
+          }
+        },
+      },
+    }
+  )
+);

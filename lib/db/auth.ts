@@ -1,48 +1,75 @@
-// Auth using IndexedDB
-import { getSetting, setSetting } from './database';
+// Auth using Server API (centralized)
 
-// Simple hash function for password (browser-compatible)
-function hashPassword(password: string): string {
-  // Simple hash for demo purposes
-  // In production, use bcrypt or argon2 on server side
-  let hash = 0;
-  const str = password + 'kstore-salt';
-  for (let i = 0; i < str.length; i++) {
-    const char = str.charCodeAt(i);
-    hash = ((hash << 5) - hash) + char;
-    hash = hash & hash; // Convert to 32bit integer
-  }
-  return hash.toString(16);
-}
+const API_BASE = '/api';
 
-// ==================== SETTINGS ====================
+// ==================== AUTHENTICATION ====================
 
 export async function hasPassword(): Promise<boolean> {
-  const settings = await getSetting('password');
-  return !!settings;
+  try {
+    const response = await fetch(`${API_BASE}/auth?action=check`);
+    if (!response.ok) return false;
+    const data = await response.json();
+    return data.hasPassword;
+  } catch (error) {
+    console.error('Error checking password:', error);
+    return false;
+  }
 }
 
 export async function setPassword(password: string): Promise<boolean> {
-  const passwordHash = hashPassword(password);
   try {
-    await setSetting('password', passwordHash);
+    const response = await fetch(`${API_BASE}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'setup', password }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to set password');
+    }
+    
     return true;
   } catch (error) {
+    console.error('Error setting password:', error);
     return false;
   }
 }
 
 export async function verifyPassword(password: string): Promise<boolean> {
-  const storedHash = await getSetting('password');
-  if (!storedHash) return false;
-
-  const inputHash = hashPassword(password);
-  return inputHash === storedHash;
+  try {
+    const response = await fetch(`${API_BASE}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'verify', password }),
+    });
+    
+    if (!response.ok) return false;
+    
+    const data = await response.json();
+    return data.valid;
+  } catch (error) {
+    console.error('Error verifying password:', error);
+    return false;
+  }
 }
 
 export async function changePassword(oldPassword: string, newPassword: string): Promise<boolean> {
-  const isValid = await verifyPassword(oldPassword);
-  if (!isValid) return false;
-
-  return await setPassword(newPassword);
+  try {
+    const response = await fetch(`${API_BASE}/auth`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ action: 'change', oldPassword, password: newPassword }),
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Failed to change password');
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error changing password:', error);
+    return false;
+  }
 }

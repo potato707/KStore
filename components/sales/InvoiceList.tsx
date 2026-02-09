@@ -78,6 +78,7 @@ export function InvoiceList({ compact = false }: InvoiceListProps) {
       removeInvoice(invoiceToDelete);
       setShowDeleteConfirm(false);
       setInvoiceToDelete(null);
+      setSelectedInvoice(null); // Close the invoice detail modal
     }
   };
 

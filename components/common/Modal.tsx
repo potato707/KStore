@@ -102,6 +102,8 @@ interface ConfirmDialogProps {
   message: string;
   confirmLabel?: string;
   cancelLabel?: string;
+  confirmText?: string;
+  cancelText?: string;
   variant?: 'danger' | 'warning' | 'info';
 }
 
@@ -113,6 +115,8 @@ export function ConfirmDialog({
   message,
   confirmLabel = 'تأكيد',
   cancelLabel = 'إلغاء',
+  confirmText="حذف",
+  cancelText="إلغاء",
   variant = 'danger',
 }: ConfirmDialogProps) {
   const variantStyles = {

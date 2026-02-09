@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist } from 'zustand/middleware';
 import {
   Product,
   Invoice,
@@ -50,13 +51,15 @@ interface GlobalStore {
   clearError: () => void;
 }
 
-export const useGlobalStore = create<GlobalStore>((set, get) => ({
-  // Initial state
-  products: [],
-  invoices: [],
-  lowStockProducts: [],
-  isOnline: true,
-  todayRevenue: 0,
+export const useGlobalStore = create<GlobalStore>()(
+  persist(
+    (set, get) => ({
+      // Initial state
+      products: [],
+      invoices: [],
+      lowStockProducts: [],
+      isOnline: true,
+      todayRevenue: 0,
   todayProfit: 0,
   todayItems: 0,
   todayInvoices: 0,
@@ -199,4 +202,39 @@ export const useGlobalStore = create<GlobalStore>((set, get) => ({
   clearError: () => {
     set({ error: null });
   },
-}));
+}),
+    {
+      name: 'kstore-global',
+      partialize: (state) => ({
+        products: state.products,
+        invoices: state.invoices,
+        lowStockProducts: state.lowStockProducts,
+      }),
+      // Use localStorage with fallback
+      storage: {
+        getItem: (name) => {
+          try {
+            const str = localStorage.getItem(name);
+            return str ? JSON.parse(str) : null;
+          } catch {
+            return null;
+          }
+        },
+        setItem: (name, value) => {
+          try {
+            localStorage.setItem(name, JSON.stringify(value));
+          } catch {
+            // Silently fail if localStorage is unavailable
+          }
+        },
+        removeItem: (name) => {
+          try {
+            localStorage.removeItem(name);
+          } catch {
+            // Silently fail
+          }
+        },
+      },
+    }
+  )
+);

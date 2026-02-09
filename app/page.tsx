@@ -30,6 +30,7 @@ import { ConfirmDialog } from '@/components/common/Modal';
 import { ProductForm } from '@/components/inventory/ProductForm';
 import { CartPanel } from '@/components/sales/CartPanel';
 import { InvoiceList } from '@/components/sales/InvoiceList';
+import { OfflineIndicator, InstallPrompt } from '@/components/common/OfflineIndicator';
 
 type Tab = 'dashboard' | 'inventory' | 'sales';
 
@@ -112,6 +113,12 @@ export default function HomePage() {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
+      {/* Offline Indicator */}
+      <OfflineIndicator />
+      
+      {/* Install Prompt */}
+      <InstallPrompt />
+      
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
         <div className="flex items-center justify-between px-6 py-4">
