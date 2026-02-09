@@ -88,14 +88,14 @@ export async function searchProducts(query: string): Promise<Product[]> {
 }
 
 export async function getLowStockProducts(): Promise<Product[]> {
+  // Get all products and filter client-side for stock <= min_stock
   const { data, error } = await supabase
     .from('products')
     .select('*')
-    .lte('stock', supabase.raw('min_stock'))
     .order('stock', { ascending: true });
 
   if (error) throw error;
-  return data || [];
+  return (data || []).filter(p => p.stock <= p.minStock);
 }
 
 // ==================== INVOICES ====================
