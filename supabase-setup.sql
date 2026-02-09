@@ -8,6 +8,20 @@
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- ============================================
+-- SETTINGS TABLE (for password storage)
+-- ============================================
+CREATE TABLE IF NOT EXISTS settings (
+  id TEXT PRIMARY KEY DEFAULT 'default',
+  password_hash TEXT,
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
+-- Insert default settings
+INSERT INTO settings (id) VALUES ('default')
+ON CONFLICT (id) DO NOTHING;
+
+-- ============================================
 -- PRODUCTS TABLE
 -- ============================================
 CREATE TABLE IF NOT EXISTS products (
@@ -105,6 +119,20 @@ CREATE TRIGGER invoices_updated_at
   FOR EACH ROW
   EXECUTE FUNCTION update_invoices_updated_at();
 
+-- Settings updated_at trigger
+CREATE OR REPLACE FUNCTION update_settings_updated_at()
+RETURNS TRIGGER AS $$
+BEGIN
+  NEW.updated_at = NOW();
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+CREATE TRIGGER settings_updated_at
+  BEFORE UPDATE ON settings
+  FOR EACH ROW
+  EXECUTE FUNCTION update_settings_updated_at();
+
 -- ============================================
 -- ROW LEVEL SECURITY (RLS)
 -- ============================================
@@ -112,6 +140,7 @@ CREATE TRIGGER invoices_updated_at
 -- Enable RLS
 ALTER TABLE products ENABLE ROW LEVEL SECURITY;
 ALTER TABLE invoices ENABLE ROW LEVEL SECURITY;
+ALTER TABLE settings ENABLE ROW LEVEL SECURITY;
 
 -- Allow authenticated users to manage products
 CREATE POLICY "Users can view products" ON products
@@ -139,6 +168,16 @@ CREATE POLICY "Users can update invoices" ON invoices
 CREATE POLICY "Users can delete invoices" ON invoices
   FOR DELETE USING (auth.role() = 'authenticated');
 
+-- Allow authenticated users to manage settings (password)
+CREATE POLICY "Users can view settings" ON settings
+  FOR SELECT USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can update settings" ON settings
+  FOR UPDATE USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Users can insert settings" ON settings
+  FOR INSERT WITH CHECK (auth.role() = 'authenticated');
+
 -- ============================================
 -- SAMPLE DATA (optional)
 -- ============================================
@@ -149,4 +188,4 @@ INSERT INTO products (barcode, name, description, category, cost_price, selling_
   ('1234567892', 'شيبسي بطاطس', 'شيبسي بطاطس بالجبن', 'وجبات خفيفة', 3, 5, 30, 10, 'كيس'),
   ('1234567893', 'شوكولاتة', 'شوكولاتة بالحليب', 'حلويات', 4, 6, 40, 10, 'قطعة'),
   ('1234567894', 'بسكويت', 'بسكويت بالشاي', 'حلويات', 2, 4, 60, 15, 'كيس')
-ON CONFLICT (barcode) DO NOTHING;
+ON CONFLICT DO NOTHING;

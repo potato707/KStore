@@ -28,7 +28,6 @@ import { ConfirmDialog } from '@/components/common/Modal';
 import { ProductForm } from '@/components/inventory/ProductForm';
 import { CartPanel } from '@/components/sales/CartPanel';
 import { InvoiceList } from '@/components/sales/InvoiceList';
-import { LogoutButton } from '@/components/auth/LogoutButton';
 
 type Tab = 'dashboard' | 'inventory' | 'sales';
 
@@ -142,9 +141,6 @@ export default function HomePage() {
               <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
               تحديث
             </Button>
-
-            {/* Logout Button */}
-            <LogoutButton />
           </div>
         </div>
 
