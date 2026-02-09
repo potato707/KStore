@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { Trash2, Check, X, Receipt, CreditCard, DollarSign, Wallet } from 'lucide-react';
+import { Trash2, Receipt, CreditCard, DollarSign, Wallet } from 'lucide-react';
 import { useCartStore } from '@/lib/stores/cart-store';
 import { useGlobalStore } from '@/lib/stores/global-store';
 import { formatCurrency, cn } from '@/lib/utils/cn';
@@ -32,8 +32,6 @@ export function CartPanel() {
 
   const { addInvoice } = useGlobalStore();
   const [showCheckoutModal, setShowCheckoutModal] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editingQty, setEditingQty] = useState<number>(0);
 
   const subtotal = getSubtotal();
   const total = getTotal();
@@ -77,17 +75,12 @@ export function CartPanel() {
     });
   };
 
-  const handleQuantityEdit = (productId: string, newQty: number) => {
-    const validQty = Math.max(0, Math.min(newQty, items.find(i => i.product.id === productId)!.product.stock));
-    updateQuantity(productId, validQty);
-    setEditingId(null);
-  };
-
-  const handleKeyPress = (e: React.KeyboardEvent, productId: string) => {
-    if (e.key === 'Enter') {
-      handleQuantityEdit(productId, editingQty);
-    } else if (e.key === 'Escape') {
-      setEditingId(null);
+  const handleQuantityChange = (productId: string, newQty: string) => {
+    const qty = parseInt(newQty) || 0;
+    const item = items.find(i => i.product.id === productId);
+    if (item) {
+      const validQty = Math.max(0, Math.min(qty, item.product.stock));
+      updateQuantity(productId, validQty);
     }
   };
 
@@ -129,62 +122,31 @@ export function CartPanel() {
 
                   {/* Quantity Input */}
                   <div className="flex items-center gap-1">
-                    {editingId === item.product.id ? (
-                      <>
-                        <input
-                          type="number"
-                          min="0"
-                          max={item.product.stock}
-                          value={editingQty}
-                          onChange={(e) => setEditingQty(parseInt(e.target.value) || 0)}
-                          onKeyDown={(e) => handleKeyPress(e, item.product.id)}
-                          className="w-16 h-8 text-center text-sm border border-gray-300 rounded focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
-                          autoFocus
-                        />
-                        <button
-                          onClick={() => handleQuantityEdit(item.product.id, editingQty)}
-                          className="p-1 text-green-600 hover:bg-green-50 rounded"
-                        >
-                          <Check className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="p-1 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <X className="w-4 h-4" />
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600"
-                          onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
-                        >
-                          -
-                        </button>
-                        <input
-                          type="number"
-                          value={item.quantity}
-                          readOnly
-                          onClick={() => {
-                            setEditingId(item.product.id);
-                            setEditingQty(item.quantity);
-                          }}
-                          className="w-12 h-8 text-center text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded cursor-text hover:border-blue-300 focus:outline-none"
-                        />
-                        <button
-                          className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600"
-                          onClick={() =>
-                            updateQuantity(
-                              item.product.id,
-                              Math.min(item.quantity + 1, item.product.stock)
-                            )
-                          }
-                        >
-                          +
-                        </button>
-                      </>
-                    )}
+                    <button
+                      className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600"
+                      onClick={() => updateQuantity(item.product.id, item.quantity - 1)}
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="0"
+                      max={item.product.stock}
+                      value={item.quantity}
+                      onChange={(e) => handleQuantityChange(item.product.id, e.target.value)}
+                      className="w-12 h-8 text-center text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                    />
+                    <button
+                      className="w-7 h-7 flex items-center justify-center rounded hover:bg-gray-200 text-gray-600"
+                      onClick={() =>
+                        updateQuantity(
+                          item.product.id,
+                          Math.min(item.quantity + 1, item.product.stock)
+                        )
+                      }
+                    >
+                      +
+                    </button>
                   </div>
 
                   <p className="text-sm font-bold w-20 text-left text-gray-900">

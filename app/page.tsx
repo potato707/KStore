@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import {
   Package,
   ShoppingCart,
@@ -15,6 +16,7 @@ import {
   DollarSign,
   Box,
   Receipt,
+  ArrowRight,
 } from 'lucide-react';
 import { useGlobalStore } from '@/lib/stores/global-store';
 import { useCartStore } from '@/lib/stores/cart-store';
@@ -44,6 +46,8 @@ export default function HomePage() {
     todayInvoices,
     loadData,
     addProduct,
+    editProduct,
+    removeProduct,
     addInvoice,
     setOnlineStatus,
   } = useGlobalStore();
@@ -51,6 +55,8 @@ export default function HomePage() {
   const [activeTab, setActiveTab] = useState<Tab>('dashboard');
   const [searchQuery, setSearchQuery] = useState('');
   const [showProductModal, setShowProductModal] = useState(false);
+  const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [deletingProduct, setDeletingProduct] = useState<any>(null);
   const [scannedProduct, setScannedProduct] = useState<any>(null);
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
 
@@ -217,16 +223,27 @@ export default function HomePage() {
 
             {/* Recent Invoices */}
             <Card className="border-gray-200">
-              <CardHeader>
-                <CardTitle>آخر المبيعات</CardTitle>
-                <CardDescription>أحدث عمليات البيع</CardDescription>
+              <CardHeader className="flex flex-row items-center justify-between">
+                <div>
+                  <CardTitle>آخر المبيعات</CardTitle>
+                  <CardDescription>أحدث عمليات البيع</CardDescription>
+                </div>
+                <Link href="/sales">
+                  <Button variant="ghost" size="sm">
+                    عرض الكل
+                    <ArrowRight className="w-4 h-4 mr-2" />
+                  </Button>
+                </Link>
               </CardHeader>
               <CardContent>
                 {invoices.length === 0 ? (
                   <p className="text-center text-gray-500 py-8">لا توجد مبيعات بعد</p>
                 ) : (
                   <div className="space-y-3">
-                    {invoices.slice(0, 5).map((invoice) => (
+                    {[...invoices]
+                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+                      .slice(0, 5)
+                      .map((invoice) => (
                       <div
                         key={invoice.id}
                         className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
@@ -282,6 +299,13 @@ export default function HomePage() {
                   onAddToCart={() => {
                     cart.addItem(product);
                   }}
+                  onEdit={() => {
+                    setEditingProduct(product);
+                    setShowProductModal(true);
+                  }}
+                  onDelete={() => {
+                    setDeletingProduct(product);
+                  }}
                 />
               ))}
             </div>
@@ -330,10 +354,18 @@ export default function HomePage() {
 
               {/* Recent Invoices */}
               <div className="mt-6">
-                <h2 className="text-lg font-bold mb-4 flex items-center gap-2 text-gray-800">
-                  <Receipt className="w-5 h-5" />
-                  آخر المبيعات
-                </h2>
+                <div className="flex items-center justify-between mb-4">
+                  <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800">
+                    <Receipt className="w-5 h-5" />
+                    آخر المبيعات
+                  </h2>
+                  <Link href="/sales">
+                    <Button variant="ghost" size="sm">
+                      عرض الكل
+                      <ArrowRight className="w-4 h-4 mr-2" />
+                    </Button>
+                  </Link>
+                </div>
                 <InvoiceList compact />
               </div>
             </div>
@@ -351,24 +383,48 @@ export default function HomePage() {
         isOpen={showProductModal}
         onClose={() => {
           setShowProductModal(false);
+          setEditingProduct(null);
           setScannedProduct(null);
         }}
-        title={scannedProduct?.notFound ? 'إضافة منتج جديد' : 'إضافة منتج جديد'}
+        title={editingProduct ? 'تعديل المنتج' : (scannedProduct?.notFound ? 'إضافة منتج جديد' : 'إضافة منتج جديد')}
         size="lg"
       >
         <ProductForm
+          product={editingProduct}
           onSubmit={async (data) => {
-            await addProduct(data);
+            if (editingProduct) {
+              await editProduct(editingProduct.id, data);
+            } else {
+              await addProduct(data);
+            }
             setShowProductModal(false);
+            setEditingProduct(null);
             setScannedProduct(null);
           }}
           onCancel={() => {
             setShowProductModal(false);
+            setEditingProduct(null);
             setScannedProduct(null);
           }}
           scannedBarcode={scannedProduct?.barcode}
         />
       </Modal>
+
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={!!deletingProduct}
+        onClose={() => setDeletingProduct(null)}
+        onConfirm={async () => {
+          if (deletingProduct) {
+            await removeProduct(deletingProduct.id);
+            setDeletingProduct(null);
+          }
+        }}
+        title="حذف المنتج"
+        message={`هل أنت متأكد من حذف "${deletingProduct?.name}"؟`}
+        confirmText="حذف"
+        cancelText="إلغاء"
+      />
     </div>
   );
 }
@@ -434,10 +490,14 @@ function StatCard({
 function ProductCard({
   product,
   onAddToCart,
+  onEdit,
+  onDelete,
   showStock = true,
 }: {
   product: any;
   onAddToCart?: () => void;
+  onEdit?: () => void;
+  onDelete?: () => void;
   showStock?: boolean;
 }) {
   const isLowStock = product.stock <= product.minStock;
@@ -497,6 +557,31 @@ function ProductCard({
           >
             {product.stock === 0 ? 'غير متوفر' : 'إضافة للسلة'}
           </Button>
+        )}
+        
+        {(onEdit || onDelete) && (
+          <div className="flex gap-2 mt-2">
+            {onEdit && (
+              <Button
+                className="flex-1"
+                size="sm"
+                variant="ghost"
+                onClick={onEdit}
+              >
+                تعديل
+              </Button>
+            )}
+            {onDelete && (
+              <Button
+                className="flex-1"
+                size="sm"
+                variant="ghost"
+                onClick={onDelete}
+              >
+                حذف
+              </Button>
+            )}
+          </div>
         )}
       </CardContent>
     </Card>

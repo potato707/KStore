@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Lock, Key, Eye, EyeOff, Check, X, LogOut } from 'lucide-react';
-import { hasPassword, setPassword, verifyPassword } from '@/lib/supabase/auth';
+import { hasPassword, setPassword, verifyPassword } from '@/lib/db/auth';
 import { setAuthCookie, removeAuthCookie } from './actions';
 import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';

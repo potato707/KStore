@@ -31,7 +31,7 @@ export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: Pro
       sellingPrice: 0,
       stock: 0,
       minStock: 5,
-      unit: 'piece',
+      unit: 'قطعة',
     },
   });
 

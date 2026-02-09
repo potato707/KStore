@@ -1,0 +1,257 @@
+// Server-side database operations
+import { getDB, saveDB } from './db';
+import { Product, Invoice } from '../db/schema';
+
+// Helper to generate IDs
+function generateId(): string {
+  return Date.now().toString(36) + Math.random().toString(36).substr(2);
+}
+
+// ==================== PRODUCTS ====================
+
+export async function getAllProducts(): Promise<Product[]> {
+  const db = await getDB();
+  const result = db.exec('SELECT * FROM products ORDER BY created_at DESC');
+  
+  if (!result.length) return [];
+  
+  return result[0].values.map(row => ({
+    id: row[0] as string,
+    barcode: row[1] as string | null,
+    name: row[2] as string,
+    description: row[3] as string | null,
+    category: row[4] as string | null,
+    costPrice: row[5] as number,
+    sellingPrice: row[6] as number,
+    stock: row[7] as number,
+    minStock: row[8] as number,
+    unit: row[9] as string,
+    createdAt: row[10] as string,
+    updatedAt: row[11] as string,
+  }));
+}
+
+export async function getProductById(id: string): Promise<Product | null> {
+  const db = await getDB();
+  const result = db.exec('SELECT * FROM products WHERE id = ?', [id]);
+  
+  if (!result.length || !result[0].values.length) return null;
+  
+  const row = result[0].values[0];
+  return {
+    id: row[0] as string,
+    barcode: row[1] as string | null,
+    name: row[2] as string,
+    description: row[3] as string | null,
+    category: row[4] as string | null,
+    costPrice: row[5] as number,
+    sellingPrice: row[6] as number,
+    stock: row[7] as number,
+    minStock: row[8] as number,
+    unit: row[9] as string,
+    createdAt: row[10] as string,
+    updatedAt: row[11] as string,
+  };
+}
+
+export async function createProduct(
+  product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
+): Promise<Product> {
+  const db = await getDB();
+  const id = generateId();
+  const now = new Date().toISOString();
+  
+  db.run(
+    `INSERT INTO products (id, barcode, name, description, category, cost_price, selling_price, stock, min_stock, unit, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, product.barcode, product.name, product.description, product.category, 
+     product.costPrice, product.sellingPrice, product.stock, product.minStock, product.unit, now, now]
+  );
+  
+  saveDB(db);
+  
+  return {
+    ...product,
+    id,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
+export async function updateProduct(
+  id: string,
+  updates: Partial<Product>
+): Promise<boolean> {
+  const db = await getDB();
+  const now = new Date().toISOString();
+  
+  const fields: string[] = [];
+  const values: any[] = [];
+  
+  Object.entries(updates).forEach(([key, value]) => {
+    if (key !== 'id' && key !== 'createdAt' && key !== 'updatedAt') {
+      const dbKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+      fields.push(`${dbKey} = ?`);
+      values.push(value);
+    }
+  });
+  
+  if (fields.length === 0) return false;
+  
+  fields.push('updated_at = ?');
+  values.push(now, id);
+  
+  db.run(`UPDATE products SET ${fields.join(', ')} WHERE id = ?`, values);
+  saveDB(db);
+  
+  return true;
+}
+
+export async function deleteProduct(id: string): Promise<boolean> {
+  const db = await getDB();
+  db.run('DELETE FROM products WHERE id = ?', [id]);
+  saveDB(db);
+  return true;
+}
+
+// ==================== INVOICES ====================
+
+export async function getAllInvoices(): Promise<Invoice[]> {
+  const db = await getDB();
+  const result = db.exec('SELECT * FROM invoices ORDER BY created_at DESC');
+  
+  if (!result.length) return [];
+  
+  return result[0].values.map(row => ({
+    id: row[0] as string,
+    customerId: row[1] as string | null,
+    customerName: row[2] as string,
+    items: JSON.parse(row[3] as string),
+    subtotal: row[4] as number,
+    discount: row[5] as number,
+    total: row[6] as number,
+    paidAmount: row[7] as number,
+    remainingBalance: row[8] as number,
+    status: row[9] as 'paid' | 'partial' | 'unpaid',
+    paymentMethod: row[10] as 'cash' | 'card' | 'credit',
+    notes: row[11] as string | null,
+    createdAt: row[12] as string,
+    updatedAt: row[13] as string,
+    synced: Boolean(row[14]),
+  }));
+}
+
+export async function createInvoice(
+  invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt' | 'synced'>
+): Promise<Invoice> {
+  const db = await getDB();
+  const id = generateId();
+  const now = new Date().toISOString();
+  
+  db.run(
+    `INSERT INTO invoices (id, customer_id, customer_name, items, subtotal, discount, total, paid_amount, remaining_balance, status, payment_method, notes, created_at, updated_at, synced)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    [id, invoice.customerId, invoice.customerName, JSON.stringify(invoice.items),
+     invoice.subtotal, invoice.discount, invoice.total, invoice.paidAmount,
+     invoice.remainingBalance, invoice.status, invoice.paymentMethod, invoice.notes, now, now, 1]
+  );
+  
+  saveDB(db);
+  
+  return {
+    ...invoice,
+    id,
+    createdAt: now,
+    updatedAt: now,
+    synced: true,
+  };
+}
+
+export async function deleteInvoice(id: string): Promise<boolean> {
+  const db = await getDB();
+  db.run('DELETE FROM invoices WHERE id = ?', [id]);
+  saveDB(db);
+  return true;
+}
+
+// ==================== SETTINGS ====================
+
+export async function getSetting(key: string): Promise<string | null> {
+  const db = await getDB();
+  const result = db.exec('SELECT value FROM settings WHERE id = ?', [key]);
+  
+  if (!result.length || !result[0].values.length) return null;
+  
+  return result[0].values[0][0] as string;
+}
+
+export async function setSetting(key: string, value: string): Promise<void> {
+  const db = await getDB();
+  
+  db.run(
+    'INSERT OR REPLACE INTO settings (id, value) VALUES (?, ?)',
+    [key, value]
+  );
+  
+  saveDB(db);
+}
+
+// ==================== STATS ====================
+
+export async function getTodaySalesStats() {
+  const db = await getDB();
+  const today = new Date().toISOString().split('T')[0];
+  
+  const result = db.exec(
+    `SELECT 
+      COALESCE(SUM(total), 0) as revenue,
+      COALESCE(SUM(total - discount), 0) as profit,
+      COUNT(*) as count
+    FROM invoices 
+    WHERE DATE(created_at) = ?`,
+    [today]
+  );
+  
+  if (!result.length || !result[0].values.length) {
+    return { totalRevenue: 0, profit: 0, totalItems: 0, invoiceCount: 0 };
+  }
+  
+  const row = result[0].values[0];
+  return {
+    totalRevenue: row[0] as number,
+    profit: row[1] as number,
+    totalItems: 0, // Would need to parse items JSON
+    invoiceCount: row[2] as number,
+  };
+}
+
+export async function getLowStockProducts(): Promise<Product[]> {
+  const db = await getDB();
+  const result = db.exec('SELECT * FROM products WHERE stock <= min_stock ORDER BY stock ASC');
+  
+  if (!result.length) return [];
+  
+  return result[0].values.map(row => ({
+    id: row[0] as string,
+    barcode: row[1] as string | null,
+    name: row[2] as string,
+    description: row[3] as string | null,
+    category: row[4] as string | null,
+    costPrice: row[5] as number,
+    sellingPrice: row[6] as number,
+    stock: row[7] as number,
+    minStock: row[8] as number,
+    unit: row[9] as string,
+    createdAt: row[10] as string,
+    updatedAt: row[11] as string,
+  }));
+}
+
+export async function getTotalDebt(): Promise<number> {
+  const db = await getDB();
+  const result = db.exec('SELECT COALESCE(SUM(remaining_balance), 0) FROM invoices WHERE remaining_balance > 0');
+  
+  if (!result.length || !result[0].values.length) return 0;
+  
+  return result[0].values[0][0] as number;
+}

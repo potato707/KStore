@@ -16,7 +16,7 @@ import {
   getLowStockProducts,
   getTodaySalesStats,
   getTotalDebt,
-} from '@/lib/supabase/database';
+} from '@/lib/db/database';
 
 interface GlobalStore {
   // Data

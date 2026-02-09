@@ -1,0 +1,114 @@
+[
+  {
+    "customerId": null,
+    "customerName": "",
+    "items": [
+      {
+        "id": "",
+        "productId": "mlfi1txs2br9wvjjf2f",
+        "productName": "asd",
+        "barcode": "",
+        "quantity": 1,
+        "unitPrice": 0,
+        "totalPrice": 0,
+        "costPrice": 0
+      }
+    ],
+    "subtotal": 0,
+    "discount": 0,
+    "total": 0,
+    "paidAmount": 1,
+    "remainingBalance": 0,
+    "status": "paid",
+    "paymentMethod": "cash",
+    "notes": "",
+    "id": "mlfi1zjbnwtrn7el1tb",
+    "createdAt": "2026-02-09T18:22:37.607Z",
+    "updatedAt": "2026-02-09T18:22:37.607Z",
+    "synced": true
+  },
+  {
+    "customerId": null,
+    "customerName": "",
+    "items": [
+      {
+        "id": "",
+        "productId": "mlfi1txs2br9wvjjf2f",
+        "productName": "asd",
+        "barcode": "",
+        "quantity": 1,
+        "unitPrice": 0,
+        "totalPrice": 0,
+        "costPrice": 0
+      }
+    ],
+    "subtotal": 0,
+    "discount": 0,
+    "total": 0,
+    "paidAmount": 2,
+    "remainingBalance": 0,
+    "status": "paid",
+    "paymentMethod": "cash",
+    "notes": "",
+    "id": "mlfi247ra1zujc6f8zs",
+    "createdAt": "2026-02-09T18:22:43.671Z",
+    "updatedAt": "2026-02-09T18:22:43.671Z",
+    "synced": true
+  },
+  {
+    "customerId": null,
+    "customerName": "",
+    "items": [
+      {
+        "id": "",
+        "productId": "mlfi1txs2br9wvjjf2f",
+        "productName": "asd",
+        "barcode": "",
+        "quantity": 1,
+        "unitPrice": 0,
+        "totalPrice": 0,
+        "costPrice": 0
+      }
+    ],
+    "subtotal": 0,
+    "discount": 2,
+    "total": 0,
+    "paidAmount": 12,
+    "remainingBalance": 0,
+    "status": "paid",
+    "paymentMethod": "cash",
+    "notes": "",
+    "id": "mlfiaxmiqeex5e3h3aa",
+    "createdAt": "2026-02-09T18:29:35.034Z",
+    "updatedAt": "2026-02-09T18:29:35.034Z",
+    "synced": true
+  },
+  {
+    "customerId": null,
+    "customerName": "",
+    "items": [
+      {
+        "id": "",
+        "productId": "mlfi1txs2br9wvjjf2f",
+        "productName": "asd",
+        "barcode": "",
+        "quantity": 13,
+        "unitPrice": 10,
+        "totalPrice": 130,
+        "costPrice": 0
+      }
+    ],
+    "subtotal": 130,
+    "discount": 0,
+    "total": 130,
+    "paidAmount": 13,
+    "remainingBalance": 117,
+    "status": "partial",
+    "paymentMethod": "cash",
+    "notes": "",
+    "id": "mlfik4qtylio9r4ce7",
+    "createdAt": "2026-02-09T18:36:44.165Z",
+    "updatedAt": "2026-02-09T18:36:44.165Z",
+    "synced": true
+  }
+]

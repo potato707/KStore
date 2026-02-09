@@ -1,0 +1,16 @@
+[
+  {
+    "barcode": "",
+    "name": "asd",
+    "description": "",
+    "category": "",
+    "costPrice": 0,
+    "sellingPrice": 10,
+    "stock": 84,
+    "minStock": 5,
+    "unit": "piece",
+    "id": "mlfi1txs2br9wvjjf2f",
+    "createdAt": "2026-02-09T18:22:30.352Z",
+    "updatedAt": "2026-02-09T18:36:44.142Z"
+  }
+]
