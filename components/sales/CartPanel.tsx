@@ -76,10 +76,22 @@ export function CartPanel() {
   };
 
   const handleQuantityChange = (productId: string, newQty: string) => {
-    const qty = parseInt(newQty) || 0;
+    const qty = parseInt(newQty);
+    
+    // If empty or NaN, don't update (let user type)
+    if (newQty === '' || isNaN(qty)) {
+      return;
+    }
+    
     const item = items.find(i => i.product.id === productId);
     if (item) {
-      const validQty = Math.max(0, Math.min(qty, item.product.stock));
+      // If quantity is 0, remove item
+      if (qty === 0) {
+        removeItem(productId);
+        return;
+      }
+      
+      const validQty = Math.max(1, Math.min(qty, item.product.stock));
       updateQuantity(productId, validQty);
     }
   };
@@ -134,6 +146,7 @@ export function CartPanel() {
                       max={item.product.stock}
                       value={item.quantity}
                       onChange={(e) => handleQuantityChange(item.product.id, e.target.value)}
+                      onFocus={(e) => e.target.select()}
                       className="w-12 h-8 text-center text-sm font-medium text-gray-900 bg-white border border-gray-200 rounded focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
                     />
                     <button
@@ -165,109 +178,46 @@ export function CartPanel() {
             )}
           </div>
 
-          {/* Payment Amount (Customer Paid) */}
+          {/* Paid Amount */}
           {items.length > 0 && (
             <div className="space-y-2">
               <label className="text-sm font-medium text-gray-700">المبلغ المدفوع</label>
               <Input
                 type="number"
                 min="0"
-                step="0.01"
-                placeholder="المبلغ الذي دفعه العميل"
+                placeholder="اترك فارغ للدفع كامل"
                 value={paidAmount || ''}
                 onChange={(e) => setPaidAmount(parseFloat(e.target.value) || 0)}
-                startIcon={<Wallet className="w-4 h-4" />}
-              />
-            </div>
-          )}
-
-          {/* Change Due */}
-          {items.length > 0 && paidAmount > 0 && changeDue > 0 && (
-            <div className="p-3 bg-green-50 rounded-lg border border-green-200">
-              <div className="flex items-center justify-between">
-                <span className="text-sm font-medium text-green-800">المتبقي للعميل:</span>
-                <span className="text-lg font-bold text-green-600">
-                  {formatCurrency(changeDue)}
-                </span>
-              </div>
-            </div>
-          )}
-
-          {/* Discount */}
-          {items.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">الخصم</label>
-              <Input
-                type="number"
-                min="0"
-                placeholder="0"
-                value={discount || ''}
-                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
-              />
-            </div>
-          )}
-
-          {/* Payment Method */}
-          {items.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">طريقة الدفع</label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  onClick={() => setPaymentMethod('cash')}
-                  className={cn(
-                    'flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all',
-                    paymentMethod === 'cash'
-                      ? 'border-green-500 bg-green-50 text-green-700'
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
-                  )}
-                >
-                  <DollarSign className="w-4 h-4" />
-                  <span className="text-sm font-medium">نقدي</span>
-                </button>
-                <button
-                  onClick={() => setPaymentMethod('card')}
-                  className={cn(
-                    'flex items-center justify-center gap-2 p-3 rounded-lg border-2 transition-all',
-                    paymentMethod === 'card'
-                      ? 'border-blue-500 bg-blue-50 text-blue-700'
-                      : 'border-gray-200 hover:bg-gray-50 text-gray-700'
-                  )}
-                >
-                  <CreditCard className="w-4 h-4" />
-                  <span className="text-sm font-medium">بطاقة</span>
-                </button>
-              </div>
-            </div>
-          )}
-
-          {/* Notes */}
-          {items.length > 0 && (
-            <div className="space-y-2">
-              <label className="text-sm font-medium text-gray-700">ملاحظات</label>
-              <Input
-                placeholder="ملاحظات إضافية..."
-                value={notes}
-                onChange={(e) => setNotes(e.target.value)}
               />
             </div>
           )}
 
           {/* Summary */}
-          <div className="space-y-2 pt-4 border-t border-gray-200">
-            <div className="flex justify-between text-sm text-gray-600">
-              <span>المجموع الفرعي</span>
-              <span className="font-medium">{formatCurrency(subtotal)}</span>
-            </div>
-            {discount > 0 && (
-              <div className="flex justify-between text-sm text-red-600">
-                <span>الخصم</span>
-                <span className="font-medium">-{formatCurrency(discount)}</span>
-              </div>
-            )}
+          <div className="space-y-3 pt-4 border-t border-gray-200">
             <div className="flex justify-between text-lg font-bold text-gray-900">
               <span>الإجمالي</span>
               <span>{formatCurrency(total)}</span>
             </div>
+
+            {/* Show change due if overpaid */}
+            {changeDue > 0 && (
+              <div className="p-3 bg-green-50 rounded-lg border border-green-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-green-800">المتبقي للعميل:</span>
+                  <span className="text-lg font-bold text-green-600">{formatCurrency(changeDue)}</span>
+                </div>
+              </div>
+            )}
+
+            {/* Show remaining debt if underpaid */}
+            {paidAmount > 0 && paidAmount < total && (
+              <div className="p-3 bg-red-50 rounded-lg border border-red-200">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm font-medium text-red-800">المتبقي ليك:</span>
+                  <span className="text-lg font-bold text-red-600">{formatCurrency(total - paidAmount)}</span>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* Checkout Button */}
@@ -321,10 +271,17 @@ export function CartPanel() {
                 <span className="font-bold text-green-600">{formatCurrency(changeDue)}</span>
               </div>
             )}
+
+            {paidAmount > 0 && paidAmount < total && (
+              <div className="flex justify-between text-lg pt-2 border-t border-gray-200">
+                <span className="text-red-700">المتبقي ليك:</span>
+                <span className="font-bold text-red-600">{formatCurrency(total - paidAmount)}</span>
+              </div>
+            )}
           </div>
 
           <p className="text-sm text-gray-500 text-center">
-            {paymentMethod === 'cash' ? 'نقدي' : 'بطاقة'}
+            نقدي
           </p>
 
           <Button className="w-full" onClick={handleCheckout}>

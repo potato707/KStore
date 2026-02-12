@@ -21,6 +21,7 @@ import {
 import { useGlobalStore } from '@/lib/stores/global-store';
 import { useCartStore } from '@/lib/stores/cart-store';
 import { useBarcodeScanner } from '@/lib/hooks/use-barcode-scanner';
+import { useOfflineSync } from '@/lib/hooks/use-offline-sync';
 import { formatCurrency, formatDate, cn } from '@/lib/utils/cn';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
@@ -60,13 +61,52 @@ export default function HomePage() {
   const [deletingProduct, setDeletingProduct] = useState<any>(null);
   const [scannedProduct, setScannedProduct] = useState<any>(null);
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
+  const [showTodayItemsModal, setShowTodayItemsModal] = useState(false);
 
   const cart = useCartStore();
+  const { syncPending } = useOfflineSync();
 
   // Track modal state
   useEffect(() => {
     setIsAnyModalOpen(showProductModal);
   }, [showProductModal]);
+
+  // Calculate today's sold items details
+  const todaySoldItems = (() => {
+    const today = new Date().toISOString().split('T')[0];
+    const todayInvoices = invoices.filter(inv => inv.createdAt.startsWith(today));
+    
+    const soldItemsMap = new Map<string, { name: string; quantity: number; revenue: number; profit: number }>();
+    todayInvoices.forEach(inv => {
+      inv.items.forEach(item => {
+        const existing = soldItemsMap.get(item.productId);
+        const itemProfit = (item.unitPrice - item.costPrice) * item.quantity;
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.revenue += item.totalPrice;
+          existing.profit += itemProfit;
+        } else {
+          soldItemsMap.set(item.productId, {
+            name: item.productName,
+            quantity: item.quantity,
+            revenue: item.totalPrice,
+            profit: itemProfit,
+          });
+        }
+      });
+    });
+    
+    return Array.from(soldItemsMap.values()).sort((a, b) => b.quantity - a.quantity);
+  })();
+
+  // Clear old authentication cookies on mount
+  useEffect(() => {
+    // Clear old auth cookies that might cause issues
+    const cookiesToClear = ['kstore_session', 'kstore_auth'];
+    cookiesToClear.forEach(cookieName => {
+      document.cookie = `${cookieName}=; expires=Thu, 01 Jan 1970 00:00:00 UTC; path=/;`;
+    });
+  }, []);
 
   // Load data on mount
   useEffect(() => {
@@ -111,6 +151,11 @@ export default function HomePage() {
     (p.category && p.category.toLowerCase().includes(searchQuery.toLowerCase()))
   );
 
+  // Refresh data from server
+  const handleRefresh = async () => {
+    await loadData();
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-50 via-white to-blue-50">
       {/* Offline Indicator */}
@@ -148,7 +193,7 @@ export default function HomePage() {
             <Button
               variant="ghost"
               size="sm"
-              onClick={loadData}
+              onClick={handleRefresh}
               disabled={isLoading}
             >
               <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
@@ -215,11 +260,14 @@ export default function HomePage() {
                 value={formatCurrency(todayProfit)}
                 icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
               />
-              <StatCard
-                title="عدد الأصناف المباعة"
-                value={todayItems.toString()}
-                icon={<Box className="w-5 h-5 text-purple-600" />}
-              />
+              <div onClick={() => setShowTodayItemsModal(true)} className="cursor-pointer">
+                <StatCard
+                  title="عدد الأصناف المباعة"
+                  value={todayItems.toString()}
+                  icon={<Box className="w-5 h-5 text-purple-600" />}
+                  subtext="اضغط للتفاصيل"
+                />
+              </div>
               <StatCard
                 title="عدد المنتجات"
                 value={products.length.toString()}
@@ -329,38 +377,10 @@ export default function HomePage() {
         {/* Sales Tab */}
         {activeTab === 'sales' && (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            {/* Products List for Quick Add */}
+            {/* Products List for Quick Add - HIDDEN */}
             <div className="lg:col-span-2">
-              <div className="flex gap-4 items-center mb-4">
-                <div className="relative flex-1">
-                  <Search className="absolute right-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-                  <Input
-                    placeholder="مسح باركود أو بحث عن منتج..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    data-barcode-input="true"
-                    className="pr-10"
-                  />
-                </div>
-                <Button onClick={() => setShowProductModal(true)} variant="secondary">
-                  <Plus className="w-4 h-4" />
-                  منتج جديد
-                </Button>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-                {filteredProducts.map((product) => (
-                  <ProductCard
-                    key={product.id}
-                    product={product}
-                    onAddToCart={() => cart.addItem(product)}
-                    showStock
-                  />
-                ))}
-              </div>
-
               {/* Recent Invoices */}
-              <div className="mt-6">
+              <div>
                 <div className="flex items-center justify-between mb-4">
                   <h2 className="text-lg font-bold flex items-center gap-2 text-gray-800">
                     <Receipt className="w-5 h-5" />
@@ -432,6 +452,79 @@ export default function HomePage() {
         confirmText="حذف"
         cancelText="إلغاء"
       />
+
+      {/* Today's Sold Items Modal */}
+      <Modal
+        isOpen={showTodayItemsModal}
+        onClose={() => setShowTodayItemsModal(false)}
+        title="تفاصيل الأصناف المباعة اليوم"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">إجمالي الأصناف المباعة</p>
+                <p className="text-2xl font-bold text-gray-900">{todayItems}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">عدد المنتجات المختلفة</p>
+                <p className="text-2xl font-bold text-gray-900">{todaySoldItems.length}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Items List */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {todaySoldItems.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Box className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p>لا توجد أصناف مباعة اليوم</p>
+              </div>
+            ) : (
+              todaySoldItems.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{item.name}</p>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                      <span>الكمية: <span className="font-bold text-orange-600">{item.quantity}</span></span>
+                      <span>•</span>
+                      <span>الإيرادات: <span className="font-bold text-green-600">{formatCurrency(item.revenue)}</span></span>
+                      <span>•</span>
+                      <span>الربح: <span className="font-bold text-blue-600">{formatCurrency(item.profit)}</span></span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">رقم {index + 1}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          {todaySoldItems.length > 0 && (
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">إجمالي الإيرادات:</span>
+                <span className="font-bold text-green-600">
+                  {formatCurrency(todaySoldItems.reduce((sum, item) => sum + item.revenue, 0))}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm mt-2">
+                <span className="text-gray-600">إجمالي الربح:</span>
+                <span className="font-bold text-blue-600">
+                  {formatCurrency(todaySoldItems.reduce((sum, item) => sum + item.profit, 0))}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -479,7 +572,7 @@ function StatCard({
   subtext?: string;
 }) {
   return (
-    <Card className="border-gray-200">
+    <Card className="border-gray-200 hover:shadow-lg transition-shadow">
       <CardContent className="p-6">
         <div className="flex items-center justify-between mb-4">
           <p className="text-sm text-gray-600">{title}</p>
@@ -487,7 +580,7 @@ function StatCard({
         </div>
         <p className="text-2xl font-bold mb-1 text-gray-800">{value}</p>
         {trend && <p className="text-sm text-green-600">{trend}</p>}
-        {subtext && <p className="text-sm text-gray-500">{subtext}</p>}
+        {subtext && <p className="text-sm text-blue-600">{subtext}</p>}
       </CardContent>
     </Card>
   );

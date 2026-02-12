@@ -140,6 +140,31 @@ export async function deleteInvoice(id: string): Promise<boolean> {
   return true;
 }
 
+export async function returnInvoice(id: string): Promise<boolean> {
+  // Get the invoice to return
+  const invoice = await getInvoiceById(id);
+  if (!invoice) return false;
+  
+  // Return products to stock
+  const products = await getAllProducts();
+  
+  for (const item of invoice.items) {
+    const productIndex = products.findIndex((p) => p.id === item.productId);
+    if (productIndex !== -1) {
+      products[productIndex].stock += item.quantity;
+      products[productIndex].updatedAt = new Date().toISOString();
+    }
+  }
+  
+  // Save updated products
+  writeJSON(PRODUCTS_FILE, products);
+  
+  // Delete the invoice
+  const success = await deleteInvoice(id);
+  
+  return success;
+}
+
 // ==================== SETTINGS ====================
 
 export async function getSetting(key: string): Promise<string | null> {

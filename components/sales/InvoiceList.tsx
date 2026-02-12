@@ -1,7 +1,7 @@
 'use client';
 
 import { formatCurrency, formatDate } from '@/lib/utils/cn';
-import { Receipt, Eye, Trash2, DollarSign, Calendar, Filter } from 'lucide-react';
+import { Receipt, Eye, Trash2, DollarSign, Calendar, Filter, Undo2 } from 'lucide-react';
 import { Card, CardContent } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
@@ -18,10 +18,12 @@ interface InvoiceListProps {
 type DateFilter = 'all' | 'today' | 'yesterday' | 'week' | 'month' | 'custom';
 
 export function InvoiceList({ compact = false }: InvoiceListProps) {
-  const { invoices, removeInvoice } = useGlobalStore();
+  const { invoices, removeInvoice, returnInvoice } = useGlobalStore();
   const [selectedInvoice, setSelectedInvoice] = useState<Invoice | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showReturnConfirm, setShowReturnConfirm] = useState(false);
   const [invoiceToDelete, setInvoiceToDelete] = useState<string | null>(null);
+  const [invoiceToReturn, setInvoiceToReturn] = useState<string | null>(null);
   const [dateFilter, setDateFilter] = useState<DateFilter>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
@@ -78,6 +80,15 @@ export function InvoiceList({ compact = false }: InvoiceListProps) {
       removeInvoice(invoiceToDelete);
       setShowDeleteConfirm(false);
       setInvoiceToDelete(null);
+      setSelectedInvoice(null); // Close the invoice detail modal
+    }
+  };
+
+  const handleReturn = () => {
+    if (invoiceToReturn) {
+      returnInvoice(invoiceToReturn);
+      setShowReturnConfirm(false);
+      setInvoiceToReturn(null);
       setSelectedInvoice(null); // Close the invoice detail modal
     }
   };
@@ -308,6 +319,17 @@ export function InvoiceList({ compact = false }: InvoiceListProps) {
             {/* Actions */}
             <div className="flex gap-3 pt-4">
               <Button
+                variant="primary"
+                className="flex-1"
+                onClick={() => {
+                  setInvoiceToReturn(selectedInvoice.id);
+                  setShowReturnConfirm(true);
+                }}
+              >
+                <Undo2 className="w-4 h-4 ml-2" />
+                ترجيع الفاتورة
+              </Button>
+              <Button
                 variant="danger"
                 className="flex-1"
                 onClick={() => {
@@ -329,8 +351,18 @@ export function InvoiceList({ compact = false }: InvoiceListProps) {
         onClose={() => setShowDeleteConfirm(false)}
         onConfirm={handleDelete}
         title="تأكيد حذف الفاتورة"
-        message="هل أنت متأكد من حذف هذه الفاتورة؟ سيتم استرجاع الكميات للمخزون."
+        message="هل أنت متأكد من حذف هذه الفاتورة؟ لن يتم استرجاع الكميات للمخزون."
         variant="danger"
+      />
+
+      {/* Return Confirmation */}
+      <ConfirmDialog
+        isOpen={showReturnConfirm}
+        onClose={() => setShowReturnConfirm(false)}
+        onConfirm={handleReturn}
+        title="تأكيد ترجيع الفاتورة"
+        message="هل أنت متأكد من ترجيع هذه الفاتورة؟ سيتم استرجاع الكميات للمخزون وإلغاء الربح من الإحصائيات."
+        variant="info"
       />
     </>
   );

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getAllInvoices, createInvoice, deleteInvoice } from '@/lib/server/database';
+import { getAllInvoices, createInvoice, deleteInvoice, returnInvoice } from '@/lib/server/database';
 
 export async function GET() {
   try {
@@ -31,6 +31,27 @@ export async function DELETE(request: NextRequest) {
     
     const success = await deleteInvoice(id);
     return NextResponse.json({ success });
+  } catch (error: any) {
+    return NextResponse.json({ error: error.message }, { status: 500 });
+  }
+}
+
+export async function PATCH(request: NextRequest) {
+  try {
+    const { searchParams } = new URL(request.url);
+    const id = searchParams.get('id');
+    const action = searchParams.get('action');
+    
+    if (!id) {
+      return NextResponse.json({ error: 'Missing id' }, { status: 400 });
+    }
+    
+    if (action === 'return') {
+      const success = await returnInvoice(id);
+      return NextResponse.json({ success });
+    }
+    
+    return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });
   }

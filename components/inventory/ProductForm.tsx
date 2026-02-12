@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useForm } from 'react-hook-form';
-import { Input, Textarea } from '@/components/common/Input';
+import { Input } from '@/components/common/Input';
 import { Button } from '@/components/common/Button';
 import { Barcode, Package } from 'lucide-react';
 import { Product } from '@/lib/db/schema';
@@ -15,6 +15,12 @@ interface ProductFormProps {
 }
 
 export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: ProductFormProps) {
+  // Separate states for pounds and piasters
+  const [costPounds, setCostPounds] = useState(product ? Math.floor(product.costPrice) : '');
+  const [costPiasters, setCostPiasters] = useState(product ? Math.round((product.costPrice - Math.floor(product.costPrice)) * 100) : '');
+  const [sellingPounds, setSellingPounds] = useState(product ? Math.floor(product.sellingPrice) : '');
+  const [sellingPiasters, setSellingPiasters] = useState(product ? Math.round((product.sellingPrice - Math.floor(product.sellingPrice)) * 100) : '');
+
   const {
     register,
     handleSubmit,
@@ -22,14 +28,16 @@ export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: Pro
     setValue,
     watch,
   } = useForm<Omit<Product, 'id' | 'createdAt' | 'updatedAt'>>({
-    defaultValues: product || {
+    defaultValues: product ? {
+      ...product
+    } : {
       barcode: scannedBarcode || '',
       name: '',
-      description: '',
-      category: '',
-      costPrice: 0,
-      sellingPrice: 0,
-      stock: 0,
+      description: null,
+      category: null,
+      costPrice: undefined,
+      sellingPrice: undefined,
+      stock: undefined,
       minStock: 5,
       unit: 'قطعة',
     },
@@ -41,13 +49,24 @@ export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: Pro
     }
   }, [scannedBarcode, setValue]);
 
-  const sellingPrice = watch('sellingPrice');
-  const costPrice = watch('costPrice');
+  // Calculate full prices
+  const costPrice = Number(costPounds || 0) + Number(costPiasters || 0) / 100;
+  const sellingPrice = Number(sellingPounds || 0) + Number(sellingPiasters || 0) / 100;
   const profit = sellingPrice - costPrice;
   const profitMargin = sellingPrice > 0 ? (profit / sellingPrice) * 100 : 0;
 
+  const handleFormSubmit = (data: any) => {
+    // Combine pounds and piasters into full price
+    const finalData = {
+      ...data,
+      costPrice,
+      sellingPrice,
+    };
+    onSubmit(finalData);
+  };
+
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+    <form onSubmit={handleSubmit(handleFormSubmit)} className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Barcode */}
         <div className="md:col-span-2">
@@ -71,55 +90,58 @@ export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: Pro
           />
         </div>
 
-        {/* Category */}
-        <div>
-          <Input
-            label="الفئة (اختياري)"
-            placeholder="مثال: أطعمة، مشروبات..."
-            {...register('category')}
-          />
+        {/* Cost Price - Pounds and Piasters */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">سعر التكلفة *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              min="0"
+              placeholder="الجنيهات"
+              value={costPounds}
+              onChange={(e) => setCostPounds(e.target.value)}
+              label="جنيه"
+            />
+            <Input
+              type="number"
+              min="0"
+              max="99"
+              placeholder="القروش"
+              value={costPiasters}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 0;
+                setCostPiasters(Math.min(99, Math.max(0, val)).toString());
+              }}
+              label="قرش"
+            />
+          </div>
         </div>
 
-        {/* Unit */}
-        <div>
-          <Input
-            label="الوحدة"
-            {...register('unit')}
-          />
-        </div>
-
-        {/* Cost Price */}
-        <div>
-          <Input
-            label="سعر التكلفة *"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            error={errors.costPrice?.message}
-            {...register('costPrice', {
-              required: 'سعر التكلفة مطلوب',
-              min: { value: 0, message: 'يجب أن يكون السعر أكبر من صفر' },
-              valueAsNumber: true,
-            })}
-          />
-        </div>
-
-        {/* Selling Price */}
-        <div>
-          <Input
-            label="سعر البيع *"
-            type="number"
-            step="0.01"
-            min="0"
-            placeholder="0.00"
-            error={errors.sellingPrice?.message}
-            {...register('sellingPrice', {
-              required: 'سعر البيع مطلوب',
-              min: { value: 0, message: 'يجب أن يكون السعر أكبر من صفر' },
-              valueAsNumber: true,
-            })}
-          />
+        {/* Selling Price - Pounds and Piasters */}
+        <div className="md:col-span-2">
+          <label className="block text-sm font-medium text-gray-700 mb-2">سعر البيع *</label>
+          <div className="grid grid-cols-2 gap-3">
+            <Input
+              type="number"
+              min="0"
+              placeholder="الجنيهات"
+              value={sellingPounds}
+              onChange={(e) => setSellingPounds(e.target.value)}
+              label="جنيه"
+            />
+            <Input
+              type="number"
+              min="0"
+              max="99"
+              placeholder="القروش"
+              value={sellingPiasters}
+              onChange={(e) => {
+                const val = parseInt(e.target.value) || 0;
+                setSellingPiasters(Math.min(99, Math.max(0, val)).toString());
+              }}
+              label="قرش"
+            />
+          </div>
         </div>
 
         {/* Stock */}
@@ -141,16 +163,6 @@ export function ProductForm({ onSubmit, onCancel, product, scannedBarcode }: Pro
             min="0"
             placeholder="5"
             {...register('minStock', { valueAsNumber: true, min: 0 })}
-          />
-        </div>
-
-        {/* Description */}
-        <div className="md:col-span-2">
-          <Textarea
-            label="الوصف (اختياري)"
-            placeholder="وصف المنتج..."
-            rows={3}
-            {...register('description')}
           />
         </div>
       </div>

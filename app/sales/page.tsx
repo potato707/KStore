@@ -6,6 +6,7 @@ import { formatCurrency, formatDate } from '@/lib/utils/cn';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/common/Card';
 import { Button } from '@/components/common/Button';
 import { Input } from '@/components/common/Input';
+import { Modal } from '@/components/common/Modal';
 import { InvoiceList } from '@/components/sales/InvoiceList';
 import {
   DollarSign,
@@ -29,6 +30,7 @@ export default function SalesPage() {
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>('all');
   const [customStartDate, setCustomStartDate] = useState('');
   const [customEndDate, setCustomEndDate] = useState('');
+  const [showItemsModal, setShowItemsModal] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -105,12 +107,36 @@ export default function SalesPage() {
     const totalInvoices = filteredInvoices.length;
     const avgInvoiceValue = totalInvoices > 0 ? totalRevenue / totalInvoices : 0;
 
+    // Group sold items by product
+    const soldItemsMap = new Map<string, { name: string; quantity: number; revenue: number; profit: number }>();
+    filteredInvoices.forEach(inv => {
+      inv.items.forEach(item => {
+        const existing = soldItemsMap.get(item.productId);
+        const itemProfit = (item.unitPrice - item.costPrice) * item.quantity;
+        if (existing) {
+          existing.quantity += item.quantity;
+          existing.revenue += item.totalPrice;
+          existing.profit += itemProfit;
+        } else {
+          soldItemsMap.set(item.productId, {
+            name: item.productName,
+            quantity: item.quantity,
+            revenue: item.totalPrice,
+            profit: itemProfit,
+          });
+        }
+      });
+    });
+    
+    const soldItems = Array.from(soldItemsMap.values()).sort((a, b) => b.quantity - a.quantity);
+
     return {
       totalRevenue,
       totalProfit,
       totalItems,
       totalInvoices,
       avgInvoiceValue,
+      soldItems,
     };
   }, [filteredInvoices]);
 
@@ -214,12 +240,16 @@ export default function SalesPage() {
             </CardContent>
           </Card>
 
-          <Card className="border-gray-200">
+          <Card 
+            className="border-gray-200 cursor-pointer hover:shadow-lg transition-shadow"
+            onClick={() => setShowItemsModal(true)}
+          >
             <CardContent className="p-4">
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-600 mb-1">عدد الأصناف</p>
                   <p className="text-2xl font-bold text-gray-900">{stats.totalItems}</p>
+                  <p className="text-xs text-blue-600 mt-1">اضغط للتفاصيل</p>
                 </div>
                 <div className="p-3 bg-orange-100 rounded-lg">
                   <Box className="w-6 h-6 text-orange-600" />
@@ -367,6 +397,79 @@ export default function SalesPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* Sold Items Modal */}
+      <Modal
+        isOpen={showItemsModal}
+        onClose={() => setShowItemsModal(false)}
+        title="تفاصيل الأصناف المباعة"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Summary */}
+          <div className="p-4 bg-blue-50 rounded-lg border border-blue-200">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-sm text-gray-600">إجمالي الأصناف المباعة</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalItems}</p>
+              </div>
+              <div>
+                <p className="text-sm text-gray-600">عدد المنتجات المختلفة</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.soldItems.length}</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Items List */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {stats.soldItems.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Box className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p>لا توجد أصناف مباعة</p>
+              </div>
+            ) : (
+              stats.soldItems.map((item, index) => (
+                <div
+                  key={index}
+                  className="flex items-center justify-between p-4 bg-gray-50 rounded-lg border border-gray-200 hover:bg-gray-100 transition-colors"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{item.name}</p>
+                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-600">
+                      <span>الكمية: <span className="font-bold text-orange-600">{item.quantity}</span></span>
+                      <span>•</span>
+                      <span>الإيرادات: <span className="font-bold text-green-600">{formatCurrency(item.revenue)}</span></span>
+                      <span>•</span>
+                      <span>الربح: <span className="font-bold text-blue-600">{formatCurrency(item.profit)}</span></span>
+                    </div>
+                  </div>
+                  <div className="text-right">
+                    <div className="text-xs text-gray-500">رقم {index + 1}</div>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer */}
+          {stats.soldItems.length > 0 && (
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-600">إجمالي الإيرادات:</span>
+                <span className="font-bold text-green-600">
+                  {formatCurrency(stats.soldItems.reduce((sum, item) => sum + item.revenue, 0))}
+                </span>
+              </div>
+              <div className="flex justify-between text-sm mt-2">
+                <span className="text-gray-600">إجمالي الربح:</span>
+                <span className="font-bold text-blue-600">
+                  {formatCurrency(stats.soldItems.reduce((sum, item) => sum + item.profit, 0))}
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }

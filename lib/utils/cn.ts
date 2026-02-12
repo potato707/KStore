@@ -6,10 +6,13 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
-  return new Intl.NumberFormat('ar-EG', {
-    style: 'currency',
-    currency: 'EGP',
-  }).format(amount);
+  const pounds = Math.floor(amount);
+  const piasters = Math.round((amount - pounds) * 100);
+  
+  if (piasters === 0) {
+    return `${pounds} ج`;
+  }
+  return `${pounds} ج و ${piasters} ق`;
 }
 
 export function formatDate(date: string | Date): string {

@@ -84,6 +84,12 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ success: true });
     }
     
+    if (action === 'reset') {
+      // Reset/remove password - for emergency reset
+      await setSetting('password', '');
+      return NextResponse.json({ success: true, message: 'Password reset successfully' });
+    }
+    
     return NextResponse.json({ error: 'Invalid action' }, { status: 400 });
   } catch (error: any) {
     return NextResponse.json({ error: error.message }, { status: 500 });

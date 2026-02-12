@@ -47,6 +47,7 @@ interface GlobalStore {
   addInvoice: (invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt' | 'synced'>) => Promise<Invoice>;
   updateInvoice: (id: string, paidAmount: number) => Promise<boolean>;
   removeInvoice: (id: string) => Promise<boolean>;
+  returnInvoice: (id: string) => Promise<boolean>;
   setOnlineStatus: (isOnline: boolean) => void;
   clearError: () => void;
 }
@@ -189,6 +190,28 @@ export const useGlobalStore = create<GlobalStore>()(
       return success;
     } catch (error) {
       set({ error: error instanceof Error ? error.message : 'فشل في حذف الفاتورة' });
+      return false;
+    }
+  },
+
+  // Return invoice (restore stock and delete)
+  returnInvoice: async (id) => {
+    try {
+      const response = await fetch(`/api/invoices?id=${id}&action=return`, {
+        method: 'PATCH',
+      });
+      
+      if (!response.ok) {
+        throw new Error('فشل في ترجيع الفاتورة');
+      }
+      
+      const { success } = await response.json();
+      if (success) {
+        await get().loadData();
+      }
+      return success;
+    } catch (error) {
+      set({ error: error instanceof Error ? error.message : 'فشل في ترجيع الفاتورة' });
       return false;
     }
   },
