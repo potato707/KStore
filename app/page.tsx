@@ -9,6 +9,7 @@ import {
   Search,
   Plus,
   Barcode,
+  Camera,
   Wifi,
   WifiOff,
   AlertCircle,
@@ -32,6 +33,7 @@ import { ProductForm } from '@/components/inventory/ProductForm';
 import { CartPanel } from '@/components/sales/CartPanel';
 import { InvoiceList } from '@/components/sales/InvoiceList';
 import { OfflineIndicator, InstallPrompt } from '@/components/common/OfflineIndicator';
+import { CameraBarcodeScanner } from '@/components/common/CameraBarcodeScanner';
 
 type Tab = 'dashboard' | 'inventory' | 'sales';
 
@@ -62,14 +64,26 @@ export default function HomePage() {
   const [scannedProduct, setScannedProduct] = useState<any>(null);
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
   const [showTodayItemsModal, setShowTodayItemsModal] = useState(false);
+  const [showCameraScanner, setShowCameraScanner] = useState(false);
 
   const cart = useCartStore();
   const { syncPending } = useOfflineSync();
 
+  const handleBarcodeDetected = (barcode: string) => {
+    const product = products.find(p => p.barcode === barcode);
+    if (product) {
+      cart.addItem(product);
+    } else {
+      // Product not found - show product modal with barcode
+      setScannedProduct({ barcode, notFound: true });
+      setShowProductModal(true);
+    }
+  };
+
   // Track modal state
   useEffect(() => {
-    setIsAnyModalOpen(showProductModal);
-  }, [showProductModal]);
+    setIsAnyModalOpen(showProductModal || showCameraScanner);
+  }, [showProductModal, showCameraScanner]);
 
   // Calculate today's sold items details
   const todaySoldItems = (() => {
@@ -133,16 +147,7 @@ export default function HomePage() {
   useBarcodeScanner({
     enabled: true,
     disabledWhenModalOpen: isAnyModalOpen, // Disable when any modal is open
-    onScan: (barcode) => {
-      const product = products.find(p => p.barcode === barcode);
-      if (product) {
-        cart.addItem(product);
-      } else {
-        // Product not found - show product modal with barcode
-        setScannedProduct({ barcode, notFound: true });
-        setShowProductModal(true);
-      }
-    },
+    onScan: handleBarcodeDetected,
   });
 
   const filteredProducts = products.filter(p =>
@@ -163,6 +168,12 @@ export default function HomePage() {
       
       {/* Install Prompt */}
       <InstallPrompt />
+
+      <CameraBarcodeScanner
+        isOpen={showCameraScanner}
+        onClose={() => setShowCameraScanner(false)}
+        onDetected={handleBarcodeDetected}
+      />
       
       {/* Header */}
       <header className="bg-white border-b border-gray-200 shadow-sm sticky top-0 z-40">
@@ -177,10 +188,10 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex flex-wrap items-center justify-end gap-2 sm:gap-3">
             {/* Online Status */}
             <div className={cn(
-              'flex items-center gap-2 px-3 py-1.5 rounded-lg text-sm font-medium',
+              'flex items-center gap-2 whitespace-nowrap px-3 py-1.5 rounded-lg text-sm font-medium',
               isOnline
                 ? 'bg-green-50 text-green-700 border border-green-200'
                 : 'bg-gray-100 text-gray-600 border border-gray-200'
@@ -198,6 +209,17 @@ export default function HomePage() {
             >
               <RefreshCw className={cn('w-4 h-4', isLoading && 'animate-spin')} />
               تحديث
+            </Button>
+
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => setShowCameraScanner(true)}
+              className="h-11 w-full rounded-xl px-4 sm:h-8 sm:w-auto sm:rounded-lg sm:px-3"
+            >
+              <Camera className="w-4 h-4" />
+              <span className="sm:hidden">كاميرا</span>
+              <span className="hidden sm:inline">كاميرا باركود</span>
             </Button>
           </div>
         </div>
