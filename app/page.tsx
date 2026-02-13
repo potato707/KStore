@@ -65,6 +65,7 @@ export default function HomePage() {
   const [isAnyModalOpen, setIsAnyModalOpen] = useState(false);
   const [showTodayItemsModal, setShowTodayItemsModal] = useState(false);
   const [showCameraScanner, setShowCameraScanner] = useState(false);
+  const [showLowStockModal, setShowLowStockModal] = useState(false);
 
   const cart = useCartStore();
   const { syncPending } = useOfflineSync();
@@ -82,8 +83,8 @@ export default function HomePage() {
 
   // Track modal state
   useEffect(() => {
-    setIsAnyModalOpen(showProductModal || showCameraScanner);
-  }, [showProductModal, showCameraScanner]);
+    setIsAnyModalOpen(showProductModal || showCameraScanner || showLowStockModal);
+  }, [showProductModal, showCameraScanner, showLowStockModal]);
 
   // Calculate today's sold items details
   const todaySoldItems = (() => {
@@ -252,16 +253,26 @@ export default function HomePage() {
         {/* Low Stock Alert */}
         {lowStockProducts.length > 0 && (
           <div className="mb-6 p-4 bg-amber-50 border border-amber-200 rounded-lg">
-            <div className="flex items-center gap-3">
-              <AlertCircle className="w-5 h-5 text-amber-600" />
-              <div>
-                <p className="font-medium text-amber-900">
-                  تنبيه: منتجات منخفضة المخزون
-                </p>
-                <p className="text-sm text-amber-700">
-                  {lowStockProducts.length} منتج وصلت للحد الأدنى
-                </p>
+            <div className="flex items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <AlertCircle className="w-5 h-5 text-amber-600" />
+                <div>
+                  <p className="font-medium text-amber-900">
+                    تنبيه: منتجات منخفضة المخزون
+                  </p>
+                  <p className="text-sm text-amber-700">
+                    {lowStockProducts.length} منتج وصلت للحد الأدنى
+                  </p>
+                </div>
               </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowLowStockModal(true)}
+                className="border border-amber-300 text-amber-700 hover:bg-amber-100"
+              >
+                عرض المنتجات
+              </Button>
             </div>
           </div>
         )}
@@ -547,6 +558,105 @@ export default function HomePage() {
           )}
         </div>
       </Modal>
+
+      {/* Low Stock Products Modal */}
+      <Modal
+        isOpen={showLowStockModal}
+        onClose={() => setShowLowStockModal(false)}
+        title="المنتجات المنخفضة المخزون"
+      >
+        <div className="space-y-4">
+          <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+            <div className="flex items-center gap-2">
+              <AlertCircle className="w-4 h-4 text-amber-600" />
+              <p className="text-sm text-amber-700">
+                {lowStockProducts.length} منتج وصلت للحد الأدنى أو أقل
+              </p>
+            </div>
+          </div>
+
+          <div className="space-y-3 max-h-[60vh] overflow-y-auto">
+            {lowStockProducts.map((product) => (
+              <div
+                key={product.id}
+                className="p-4 border border-red-200 rounded-lg bg-red-50/50 hover:bg-red-50 transition-colors"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <div className="flex-1">
+                    <h3 className="font-bold text-gray-900">{product.name}</h3>
+                    {product.category && (
+                      <p className="text-sm text-gray-600">{product.category}</p>
+                    )}
+                    {product.barcode && (
+                      <p className="text-xs text-gray-500 mt-1 flex items-center gap-1">
+                        <Barcode className="w-3 h-3" />
+                        {product.barcode}
+                      </p>
+                    )}
+                  </div>
+                  <div className="text-left">
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-1 text-xs font-bold bg-red-100 text-red-700 rounded-full">
+                        متبقي: {product.stock} {product.unit}
+                      </span>
+                    </div>
+                    <p className="text-xs text-gray-600 mt-1">
+                      الحد الأدنى: {product.minStock}
+                    </p>
+                  </div>
+                </div>
+
+                <div className="mt-3 pt-3 border-t border-red-200 grid grid-cols-2 gap-3 text-sm">
+                  <div>
+                    <span className="text-gray-600">سعر الشراء:</span>
+                    <span className="font-medium mr-1">{formatCurrency(product.costPrice)}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-600">سعر البيع:</span>
+                    <span className="font-medium mr-1">{formatCurrency(product.sellingPrice)}</span>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex gap-2">
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    className="flex-1 text-xs border border-gray-300"
+                    onClick={() => {
+                      setEditingProduct(product);
+                      setShowLowStockModal(false);
+                      setShowProductModal(true);
+                    }}
+                  >
+                    تعديل المنتج
+                  </Button>
+                  <Button
+                    size="sm"
+                    className="flex-1 text-xs"
+                    onClick={() => {
+                      setShowLowStockModal(false);
+                      cart.addItem(product);
+                      setActiveTab('sales');
+                    }}
+                  >
+                    إضافة للفاتورة
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          <div className="pt-4 border-t">
+            <Button
+              variant="ghost"
+              className="w-full border border-gray-300"
+              onClick={() => setShowLowStockModal(false)}
+            >
+              إغلاق
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }
@@ -607,7 +717,6 @@ function StatCard({
     </Card>
   );
 }
-
 // Product Card Component
 function ProductCard({
   product,
