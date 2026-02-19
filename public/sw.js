@@ -1,5 +1,5 @@
 // Service Worker for KStore PWA - Full Offline Support
-var CACHE_NAME = 'kstore-v5';
+var CACHE_NAME = 'kstore-v7';
 
 // Install - just skip waiting
 self.addEventListener('install', function(event) {
@@ -21,7 +21,7 @@ self.addEventListener('activate', function(event) {
   );
 });
 
-// Fetch - Cache everything, serve from cache when offline
+// Fetch handler
 self.addEventListener('fetch', function(event) {
   var request = event.request;
 
@@ -35,10 +35,23 @@ self.addEventListener('fetch', function(event) {
     return;
   }
 
+  // NEVER cache API calls - the app handles its own offline cache via localStorage
+  if (request.url.indexOf('/api/') !== -1) {
+    event.respondWith(
+      fetch(request).catch(function() {
+        // API offline - return error so the app uses localStorage fallback
+        return new Response(JSON.stringify({ error: 'offline' }), {
+          status: 503,
+          headers: { 'Content-Type': 'application/json' }
+        });
+      })
+    );
+    return;
+  }
+
+  // For static assets (JS, CSS, images, fonts) - cache them
   event.respondWith(
-    // Try network first
     fetch(request).then(function(response) {
-      // Got a good response - cache it
       if (response && response.status === 200) {
         var responseToCache = response.clone();
         caches.open(CACHE_NAME).then(function(cache) {
@@ -47,21 +60,10 @@ self.addEventListener('fetch', function(event) {
       }
       return response;
     }).catch(function() {
-      // Network failed - try cache
       return caches.match(request).then(function(cachedResponse) {
         if (cachedResponse) {
           return cachedResponse;
         }
-
-        // For API calls - return empty array
-        if (request.url.indexOf('/api/') !== -1) {
-          return new Response('[]', {
-            status: 200,
-            headers: { 'Content-Type': 'application/json' }
-          });
-        }
-
-        // For everything else - return nothing
         return new Response('', { status: 404 });
       });
     })

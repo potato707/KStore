@@ -16,21 +16,21 @@ export function InventoryOverviewBar() {
 
   const totals = useMemo(() => {
     const wholesaleTotal = products.reduce(
-      (sum, product) => sum + product.costPrice * product.stock,
+      (sum, product) => sum + ((product.costPrice || 0) * (product.stock || 0)),
       0
     );
 
     const retailTotal = products.reduce(
-      (sum, product) => sum + product.sellingPrice * product.stock,
+      (sum, product) => sum + ((product.sellingPrice || 0) * (product.stock || 0)),
       0
     );
 
     const netProfit = retailTotal - wholesaleTotal;
 
     return {
-      wholesaleTotal,
-      retailTotal,
-      netProfit,
+      wholesaleTotal: wholesaleTotal || 0,
+      retailTotal: retailTotal || 0,
+      netProfit: netProfit || 0,
     };
   }, [products]);
 

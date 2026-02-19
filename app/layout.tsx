@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Cairo } from "next/font/google";
 import "./globals.css";
 import { InventoryOverviewBar } from "@/components/common/InventoryOverviewBar";
+import { AuthProvider } from "@/components/auth/AuthProvider";
 
 const cairo = Cairo({
   variable: "--font-cairo",
@@ -68,8 +69,10 @@ export default function RootLayout({
         }} />
       </head>
       <body className={`${cairo.variable} font-cairo antialiased pb-14 sm:pb-28`}>
-        {children}
-        <InventoryOverviewBar />
+        <AuthProvider>
+          {children}
+          <InventoryOverviewBar />
+        </AuthProvider>
       </body>
     </html>
   );

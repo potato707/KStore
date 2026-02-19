@@ -1,5 +1,7 @@
-// Client-side database API wrapper - Offline-First
-import { Product, Invoice } from './schema';
+// Client-side database API wrapper - LOCAL-FIRST
+// Pattern: Save to Zustand state (→ localStorage) FIRST, then try API.
+// If API fails, data is already safe locally + queued for sync.
+import { Product, Invoice, Expense } from './schema';
 import { addPendingItem } from '@/lib/hooks/use-offline-sync';
 
 const API_BASE = '/api';
@@ -9,14 +11,19 @@ function generateId(): string {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
 
-// Helper to check if we're offline (fetch failed)
-function isOfflineError(error: unknown): boolean {
-  if (error instanceof TypeError && error.message.includes('fetch')) return true;
-  if (error instanceof TypeError && error.message.includes('Failed to fetch')) return true;
-  if (error instanceof TypeError && error.message.includes('NetworkError')) return true;
-  if (error instanceof TypeError && error.message.includes('network')) return true;
-  if (error instanceof DOMException && error.name === 'AbortError') return true;
+// Helper to check if we're offline or request failed
+function isOfflineOrFailed(error: unknown): boolean {
+  // Navigator says offline
   if (typeof navigator !== 'undefined' && !navigator.onLine) return true;
+  // Fetch TypeError (network error)
+  if (error instanceof TypeError) return true;
+  // DOMException abort
+  if (error instanceof DOMException) return true;
+  // Any error message with common offline keywords
+  if (error instanceof Error) {
+    const msg = error.message.toLowerCase();
+    if (msg.includes('fetch') || msg.includes('network') || msg.includes('offline') || msg.includes('failed')) return true;
+  }
   return false;
 }
 
@@ -50,7 +57,11 @@ export async function getAllProducts(): Promise<Product[]> {
   try {
     const response = await fetch(`${API_BASE}/products`);
     if (!response.ok) throw new Error('Failed to fetch products');
-    return response.json();
+    const data = await response.json();
+    // Validate: if server returned error object or empty when we have cache, use cache
+    if (data && data.error) throw new Error(data.error);
+    if (Array.isArray(data)) return data;
+    throw new Error('Invalid response');
   } catch (error) {
     console.log('📦 أوفلاين - جاري تحميل المنتجات من الكاش');
     return getCachedProducts();
@@ -75,7 +86,8 @@ export async function getProductByBarcode(barcode: string): Promise<Product | nu
 
 export async function createProduct(
   product: Omit<Product, 'id' | 'createdAt' | 'updatedAt'>
-): Promise<Product> {
+): Promise<Product | null> {
+  // Just try the API - the store handles local-first saving
   try {
     const response = await fetch(`${API_BASE}/products`, {
       method: 'POST',
@@ -83,29 +95,12 @@ export async function createProduct(
       body: JSON.stringify(product),
     });
 
-    if (!response.ok) throw new Error('Failed to create product');
-    return response.json();
-  } catch (error) {
-    if (isOfflineError(error)) {
-      const now = new Date().toISOString();
-      const newProduct: Product = {
-        ...product,
-        id: `offline_${generateId()}`,
-        createdAt: now,
-        updatedAt: now,
-      };
-
-      await addPendingItem({
-        type: 'product',
-        action: 'create',
-        data: product,
-        synced: false,
-      });
-
-      console.log('📦 أوفلاين - تم حفظ المنتج محلياً:', newProduct.name);
-      return newProduct;
-    }
-    throw error;
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data && data.error) return null;
+    return data;
+  } catch {
+    return null; // API failed - store already saved locally
   }
 }
 
@@ -113,7 +108,9 @@ export async function updateProduct(
   id: string,
   updates: Partial<Product>
 ): Promise<boolean> {
+  // Just try the API - the store handles local-first saving
   try {
+    if (id.startsWith('offline_')) return true; // Can't update on server, will sync later
     const response = await fetch(`${API_BASE}/products`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -123,19 +120,8 @@ export async function updateProduct(
     if (!response.ok) return false;
     const result = await response.json();
     return result.success;
-  } catch (error) {
-    if (isOfflineError(error)) {
-      await addPendingItem({
-        type: 'product',
-        action: 'update',
-        data: { id, ...updates },
-        synced: false,
-      });
-
-      console.log('📦 أوفلاين - تم حفظ تحديث المنتج محلياً');
-      return true;
-    }
-    return false;
+  } catch {
+    return false; // API failed - store already saved locally
   }
 }
 
@@ -153,6 +139,7 @@ export async function updateProductStock(
 
 export async function deleteProduct(id: string): Promise<boolean> {
   try {
+    if (id.startsWith('offline_')) return true; // Not on server
     const response = await fetch(`${API_BASE}/products?id=${id}`, {
       method: 'DELETE',
     });
@@ -160,20 +147,7 @@ export async function deleteProduct(id: string): Promise<boolean> {
     if (!response.ok) return false;
     const result = await response.json();
     return result.success;
-  } catch (error) {
-    if (isOfflineError(error)) {
-      if (!id.startsWith('offline_')) {
-        await addPendingItem({
-          type: 'product',
-          action: 'delete',
-          data: { id },
-          synced: false,
-        });
-      }
-
-      console.log('📦 أوفلاين - تم حذف المنتج محلياً');
-      return true;
-    }
+  } catch {
     return false;
   }
 }
@@ -195,7 +169,10 @@ export async function getAllInvoices(): Promise<Invoice[]> {
   try {
     const response = await fetch(`${API_BASE}/invoices`);
     if (!response.ok) throw new Error('Failed to fetch invoices');
-    return response.json();
+    const data = await response.json();
+    if (data && data.error) throw new Error(data.error);
+    if (Array.isArray(data)) return data;
+    throw new Error('Invalid response');
   } catch (error) {
     console.log('📦 أوفلاين - جاري تحميل الفواتير من الكاش');
     return getCachedInvoices();
@@ -214,12 +191,9 @@ export async function getInvoiceById(id: string): Promise<Invoice | null> {
 
 export async function createInvoice(
   invoice: Omit<Invoice, 'id' | 'createdAt' | 'updatedAt' | 'synced'>
-): Promise<Invoice> {
-  // Update product stock (works offline too now)
-  for (const item of invoice.items) {
-    await updateProductStock(item.productId, -item.quantity);
-  }
-
+): Promise<Invoice | null> {
+  // Just try the API - the store handles local-first saving + stock updates
+  // Server-side createInvoice also updates product stock
   try {
     const response = await fetch(`${API_BASE}/invoices`, {
       method: 'POST',
@@ -227,36 +201,12 @@ export async function createInvoice(
       body: JSON.stringify(invoice),
     });
 
-    if (!response.ok) throw new Error('Failed to create invoice');
-    return response.json();
-  } catch (error) {
-    if (isOfflineError(error)) {
-      const now = new Date().toISOString();
-      const newInvoice: Invoice = {
-        ...invoice,
-        id: `offline_${generateId()}`,
-        createdAt: now,
-        updatedAt: now,
-        synced: false,
-      };
-
-      await addPendingItem({
-        type: 'invoice',
-        action: 'create',
-        data: {
-          invoice: invoice,
-          stockChanges: invoice.items.map(item => ({
-            productId: item.productId,
-            quantity: -item.quantity,
-          })),
-        },
-        synced: false,
-      });
-
-      console.log('📦 أوفلاين - تم حفظ الفاتورة محلياً');
-      return newInvoice;
-    }
-    throw error;
+    if (!response.ok) return null;
+    const data = await response.json();
+    if (data && data.error) return null;
+    return data;
+  } catch {
+    return null;
   }
 }
 
@@ -294,7 +244,7 @@ export async function deleteInvoice(id: string): Promise<boolean> {
     const result = await response.json();
     return result.success;
   } catch (error) {
-    if (isOfflineError(error)) {
+    if (isOfflineOrFailed(error)) {
       if (!id.startsWith('offline_')) {
         await addPendingItem({
           type: 'invoice',
@@ -321,7 +271,7 @@ export async function returnInvoice(id: string): Promise<boolean> {
     const result = await response.json();
     return result.success;
   } catch (error) {
-    if (isOfflineError(error)) {
+    if (isOfflineOrFailed(error)) {
       if (!id.startsWith('offline_')) {
         await addPendingItem({
           type: 'invoice',
@@ -411,6 +361,72 @@ function calcTotalDebt(): number {
     .reduce((sum, inv) => sum + inv.remainingBalance, 0);
 }
 
+// ==================== UPDATE INVOICE ====================
+
+export async function updateInvoice(
+  id: string,
+  updates: Partial<Invoice>
+): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/invoices?id=${id}&action=update`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(updates),
+    });
+    if (!response.ok) return false;
+    const result = await response.json();
+    return result.success;
+  } catch (error) {
+    console.error('Failed to update invoice:', error);
+    return false;
+  }
+}
+
+// ==================== EXPENSES ====================
+
+export async function getAllExpenses(): Promise<Expense[]> {
+  try {
+    const response = await fetch(`${API_BASE}/expenses`);
+    if (!response.ok) return [];
+    return response.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function getTodayExpenses(): Promise<Expense[]> {
+  try {
+    const response = await fetch(`${API_BASE}/expenses?filter=today`);
+    if (!response.ok) return [];
+    return response.json();
+  } catch {
+    return [];
+  }
+}
+
+export async function createExpense(description: string, amount: number): Promise<Expense> {
+  const response = await fetch(`${API_BASE}/expenses`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ description, amount }),
+  });
+  if (!response.ok) throw new Error('Failed to create expense');
+  return response.json();
+}
+
+export async function deleteExpense(id: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${API_BASE}/expenses?id=${id}`, {
+      method: 'DELETE',
+    });
+    if (!response.ok) return false;
+    const result = await response.json();
+    return result.success;
+  } catch {
+    return false;
+  }
+}
+
 // ==================== SETTINGS ====================
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -434,7 +450,7 @@ export async function setSetting(key: string, value: string): Promise<void> {
 
     if (!response.ok) throw new Error('Failed to save setting');
   } catch (error) {
-    if (isOfflineError(error)) {
+    if (isOfflineOrFailed(error)) {
       console.log('📦 أوفلاين - سيتم حفظ الإعدادات لاحقاً');
       return;
     }

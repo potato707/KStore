@@ -65,3 +65,10 @@ export interface SyncStatus {
   lastSyncTime: string | null;
   pendingSync: number;
 }
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  createdAt: string;
+}

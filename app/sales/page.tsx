@@ -98,7 +98,7 @@ export default function SalesPage() {
         (itemSum, item) => itemSum + (item.unitPrice - item.costPrice) * item.quantity,
         0
       );
-      return sum + invoiceProfit;
+      return sum + invoiceProfit - (inv.discount || 0);
     }, 0);
     const totalItems = filteredInvoices.reduce(
       (sum, inv) => sum + inv.items.reduce((itemSum, item) => itemSum + item.quantity, 0),

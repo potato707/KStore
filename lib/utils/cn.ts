@@ -6,6 +6,9 @@ export function cn(...inputs: ClassValue[]) {
 }
 
 export function formatCurrency(amount: number): string {
+  if (amount == null || isNaN(amount) || !isFinite(amount)) {
+    return '0 ج';
+  }
   const pounds = Math.floor(amount);
   const piasters = Math.round((amount - pounds) * 100);
   

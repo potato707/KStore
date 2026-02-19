@@ -178,6 +178,24 @@ export function CartPanel() {
             )}
           </div>
 
+          {/* Discount Input */}
+          {items.length > 0 && (
+            <div className="space-y-2">
+              <label className="text-sm font-medium text-gray-700">خصم (جنيه)</label>
+              <Input
+                type="number"
+                min="0"
+                step="0.01"
+                placeholder="0.00"
+                value={discount || ''}
+                onChange={(e) => setDiscount(parseFloat(e.target.value) || 0)}
+              />
+              {discount > 0 && (
+                <p className="text-xs text-red-600">سيتم خصم {formatCurrency(discount)} من الإجمالي</p>
+              )}
+            </div>
+          )}
+
           {/* Paid Amount */}
           {items.length > 0 && (
             <div className="space-y-2">
@@ -194,6 +212,18 @@ export function CartPanel() {
 
           {/* Summary */}
           <div className="space-y-3 pt-4 border-t border-gray-200">
+            {discount > 0 && (
+              <>
+                <div className="flex justify-between text-sm text-gray-600">
+                  <span>المجموع الفرعي</span>
+                  <span>{formatCurrency(subtotal)}</span>
+                </div>
+                <div className="flex justify-between text-sm text-red-600">
+                  <span>الخصم</span>
+                  <span>-{formatCurrency(discount)}</span>
+                </div>
+              </>
+            )}
             <div className="flex justify-between text-lg font-bold text-gray-900">
               <span>الإجمالي</span>
               <span>{formatCurrency(total)}</span>

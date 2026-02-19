@@ -7,6 +7,14 @@ const DATA_DIR = join(process.cwd(), 'data');
 const PRODUCTS_FILE = join(DATA_DIR, 'products.json');
 const INVOICES_FILE = join(DATA_DIR, 'invoices.json');
 const SETTINGS_FILE = join(DATA_DIR, 'settings.json');
+const EXPENSES_FILE = join(DATA_DIR, 'expenses.json');
+
+export interface Expense {
+  id: string;
+  description: string;
+  amount: number;
+  createdAt: string;
+}
 
 // Ensure data directory exists
 function ensureDataDir() {
@@ -127,6 +135,17 @@ export async function createInvoice(
   invoices.push(newInvoice);
   writeJSON(INVOICES_FILE, invoices);
   
+  // Also update product stock
+  const products = await getAllProducts();
+  for (const item of invoice.items) {
+    const pIdx = products.findIndex(p => p.id === item.productId);
+    if (pIdx !== -1) {
+      products[pIdx].stock -= item.quantity;
+      products[pIdx].updatedAt = now;
+    }
+  }
+  writeJSON(PRODUCTS_FILE, products);
+  
   return newInvoice;
 }
 
@@ -165,6 +184,86 @@ export async function returnInvoice(id: string): Promise<boolean> {
   return success;
 }
 
+// ==================== UPDATE INVOICE ====================
+
+export async function updateInvoice(
+  id: string,
+  updates: Partial<Invoice>
+): Promise<boolean> {
+  const invoices = await getAllInvoices();
+  const index = invoices.findIndex((inv) => inv.id === id);
+  
+  if (index === -1) return false;
+  
+  // If items changed, handle stock differences
+  const oldInvoice = invoices[index];
+  if (updates.items) {
+    const products = await getAllProducts();
+    
+    // Restore old stock
+    for (const oldItem of oldInvoice.items) {
+      const pIdx = products.findIndex(p => p.id === oldItem.productId);
+      if (pIdx !== -1) {
+        products[pIdx].stock += oldItem.quantity;
+      }
+    }
+    
+    // Deduct new stock
+    for (const newItem of updates.items) {
+      const pIdx = products.findIndex(p => p.id === newItem.productId);
+      if (pIdx !== -1) {
+        products[pIdx].stock -= newItem.quantity;
+        products[pIdx].updatedAt = new Date().toISOString();
+      }
+    }
+    
+    writeJSON(PRODUCTS_FILE, products);
+  }
+  
+  invoices[index] = {
+    ...invoices[index],
+    ...updates,
+    id,
+    updatedAt: new Date().toISOString(),
+  };
+  
+  writeJSON(INVOICES_FILE, invoices);
+  return true;
+}
+
+// ==================== EXPENSES ====================
+
+export async function getAllExpenses(): Promise<Expense[]> {
+  return readJSON<Expense[]>(EXPENSES_FILE, []);
+}
+
+export async function getTodayExpenses(): Promise<Expense[]> {
+  const expenses = await getAllExpenses();
+  const today = new Date().toISOString().split('T')[0];
+  return expenses.filter(e => e.createdAt.startsWith(today));
+}
+
+export async function createExpense(description: string, amount: number): Promise<Expense> {
+  const expenses = await getAllExpenses();
+  const expense: Expense = {
+    id: generateId(),
+    description,
+    amount,
+    createdAt: new Date().toISOString(),
+  };
+  expenses.push(expense);
+  writeJSON(EXPENSES_FILE, expenses);
+  return expense;
+}
+
+export async function deleteExpense(id: string): Promise<boolean> {
+  const expenses = await getAllExpenses();
+  const filtered = expenses.filter(e => e.id !== id);
+  if (filtered.length === expenses.length) return false;
+  writeJSON(EXPENSES_FILE, filtered);
+  return true;
+}
+
 // ==================== SETTINGS ====================
 
 export async function getSetting(key: string): Promise<string | null> {
@@ -190,7 +289,13 @@ export async function getTodaySalesStats() {
   
   const totalRevenue = todayInvoices.reduce((sum, inv) => sum + inv.total, 0);
   const profit = todayInvoices.reduce(
-    (sum, inv) => sum + (inv.total - inv.discount),
+    (sum, inv) => {
+      const grossProfit = inv.items.reduce(
+        (s, item) => s + (item.unitPrice - item.costPrice) * item.quantity,
+        0
+      );
+      return sum + grossProfit - (inv.discount || 0);
+    },
     0
   );
   const totalItems = todayInvoices.reduce(

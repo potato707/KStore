@@ -18,7 +18,14 @@ import {
   Box,
   Receipt,
   ArrowRight,
+  Wallet,
+  Trash2,
+  Edit3,
+  CalendarDays,
+  LogOut,
+  KeyRound,
 } from 'lucide-react';
+import { useAuth } from '@/components/auth/AuthProvider';
 import { useGlobalStore } from '@/lib/stores/global-store';
 import { useCartStore } from '@/lib/stores/cart-store';
 import { useBarcodeScanner } from '@/lib/hooks/use-barcode-scanner';
@@ -42,6 +49,7 @@ export default function HomePage() {
     products,
     invoices,
     lowStockProducts,
+    expenses,
     isOnline,
     isLoading,
     todayRevenue,
@@ -53,6 +61,9 @@ export default function HomePage() {
     editProduct,
     removeProduct,
     addInvoice,
+    editInvoice,
+    addExpense,
+    removeExpense,
     setOnlineStatus,
   } = useGlobalStore();
 
@@ -66,7 +77,20 @@ export default function HomePage() {
   const [showTodayItemsModal, setShowTodayItemsModal] = useState(false);
   const [showCameraScanner, setShowCameraScanner] = useState(false);
   const [showLowStockModal, setShowLowStockModal] = useState(false);
+  const [showExpensesModal, setShowExpensesModal] = useState(false);
+  const [barcodeInput, setBarcodeInput] = useState('');
+  const [barcodeFeedback, setBarcodeFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [expenseDescription, setExpenseDescription] = useState('');
+  const [expenseAmount, setExpenseAmount] = useState('');
+  const [showDailyStatsModal, setShowDailyStatsModal] = useState(false);
+  const [showChangePasswordModal, setShowChangePasswordModal] = useState(false);
+  const [oldPassword, setOldPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [changePasswordError, setChangePasswordError] = useState('');
+  const [changePasswordSuccess, setChangePasswordSuccess] = useState(false);
 
+  const { logout } = useAuth();
   const cart = useCartStore();
   const { syncPending } = useOfflineSync();
 
@@ -81,10 +105,28 @@ export default function HomePage() {
     }
   };
 
+  const handleManualBarcodeSearch = () => {
+    const barcode = barcodeInput.trim();
+    if (!barcode) return;
+
+    const product = products.find(p => p.barcode === barcode);
+    if (product) {
+      cart.addItem(product);
+      setBarcodeFeedback({ type: 'success', message: `✅ تمت الإضافة: ${product.name}` });
+      setBarcodeInput('');
+      // Switch to sales tab if not already there
+      if (activeTab !== 'sales') setActiveTab('sales');
+    } else {
+      setBarcodeFeedback({ type: 'error', message: `❌ لا يوجد منتج بهذا الباركود: ${barcode}` });
+    }
+    // Clear feedback after 3 seconds
+    setTimeout(() => setBarcodeFeedback(null), 3000);
+  };
+
   // Track modal state
   useEffect(() => {
-    setIsAnyModalOpen(showProductModal || showCameraScanner || showLowStockModal);
-  }, [showProductModal, showCameraScanner, showLowStockModal]);
+    setIsAnyModalOpen(showProductModal || showCameraScanner || showLowStockModal || showExpensesModal || showDailyStatsModal || showChangePasswordModal);
+  }, [showProductModal, showCameraScanner, showLowStockModal, showExpensesModal, showDailyStatsModal, showChangePasswordModal]);
 
   // Calculate today's sold items details
   const todaySoldItems = (() => {
@@ -113,6 +155,52 @@ export default function HomePage() {
     
     return Array.from(soldItemsMap.values()).sort((a, b) => b.quantity - a.quantity);
   })();
+
+  // Calculate monthly daily stats
+  const monthlyDailyStats = (() => {
+    const now = new Date();
+    const year = now.getFullYear();
+    const month = now.getMonth();
+    const today = now.getDate();
+    
+    const days: { date: string; dayLabel: string; revenue: number; profit: number; invoiceCount: number; items: number }[] = [];
+    
+    for (let d = 1; d <= today; d++) {
+      const dateObj = new Date(year, month, d);
+      const dateStr = dateObj.toISOString().split('T')[0];
+      const dayInvoices = invoices.filter(inv => inv.createdAt.startsWith(dateStr));
+      
+      const revenue = dayInvoices.reduce((sum, inv) => sum + inv.total, 0);
+      const profit = dayInvoices.reduce((sum, inv) => {
+        const gp = inv.items.reduce((s, item) => s + (item.unitPrice - item.costPrice) * item.quantity, 0);
+        return sum + gp - (inv.discount || 0);
+      }, 0);
+      const invoiceCount = dayInvoices.length;
+      const items = dayInvoices.reduce((sum, inv) => sum + inv.items.reduce((s, i) => s + i.quantity, 0), 0);
+      
+      days.push({
+        date: dateStr,
+        dayLabel: `${d}/${month + 1}`,
+        revenue,
+        profit,
+        invoiceCount,
+        items,
+      });
+    }
+    
+    return days.reverse(); // newest first
+  })();
+
+  // Get today's invoices for the table
+  const todayInvoicesList = (() => {
+    const today = new Date().toISOString().split('T')[0];
+    return invoices
+      .filter(inv => inv.createdAt.startsWith(today))
+      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+  })();
+
+  // Total expenses today
+  const todayExpensesTotal = expenses.reduce((sum, e) => sum + e.amount, 0);
 
   // Clear old authentication cookies on mount
   useEffect(() => {
@@ -222,7 +310,70 @@ export default function HomePage() {
               <span className="sm:hidden">كاميرا</span>
               <span className="hidden sm:inline">كاميرا باركود</span>
             </Button>
+
+            {/* Change Password */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowChangePasswordModal(true)}
+              title="تغيير كلمة السر"
+            >
+              <KeyRound className="w-4 h-4" />
+            </Button>
+
+            {/* Logout */}
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={logout}
+              className="text-red-600 hover:bg-red-50"
+              title="تسجيل الخروج"
+            >
+              <LogOut className="w-4 h-4" />
+            </Button>
           </div>
+        </div>
+
+        {/* Barcode Manual Search */}
+        <div className="px-6 py-2 border-t border-gray-100 bg-gray-50/50">
+          <div className="flex items-center gap-2 max-w-lg">
+            <div className="relative flex-1">
+              <Barcode className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400" />
+              <input
+                type="text"
+                inputMode="numeric"
+                placeholder="ادخل رقم الباركود يدوي..."
+                value={barcodeInput}
+                onChange={(e) => setBarcodeInput(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleManualBarcodeSearch();
+                  }
+                }}
+                className="w-full h-10 pr-10 pl-3 text-sm border border-gray-300 rounded-lg bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20 placeholder:text-gray-400"
+              />
+            </div>
+            <Button
+              size="sm"
+              onClick={handleManualBarcodeSearch}
+              disabled={!barcodeInput.trim()}
+              className="h-10 px-4"
+            >
+              <Search className="w-4 h-4" />
+              بحث
+            </Button>
+          </div>
+          {barcodeFeedback && (
+            <div className={cn(
+              'mt-2 px-3 py-2 rounded-lg text-sm font-medium max-w-lg',
+              barcodeFeedback.type === 'success'
+                ? 'bg-green-50 text-green-700 border border-green-200'
+                : 'bg-red-50 text-red-700 border border-red-200'
+            )}>
+              {barcodeFeedback.message}
+            </div>
+          )}
         </div>
 
         {/* Navigation Tabs */}
@@ -280,41 +431,60 @@ export default function HomePage() {
         {/* Dashboard Tab */}
         {activeTab === 'dashboard' && (
           <div className="space-y-6">
-            {/* Stats Cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+            {/* Stats Cards + Action Buttons Row */}
+            <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
               <StatCard
                 title="مبيعات اليوم"
                 value={formatCurrency(todayRevenue)}
                 icon={<DollarSign className="w-5 h-5 text-green-600" />}
-                trend={`${todayInvoices} عملية`}
+                trend={`${todayInvoices} فاتورة`}
               />
               <StatCard
-                title="ربح اليوم"
+                title="صافي الربح"
                 value={formatCurrency(todayProfit)}
                 icon={<TrendingUp className="w-5 h-5 text-blue-600" />}
+                subtext="Net Profit"
               />
               <div onClick={() => setShowTodayItemsModal(true)} className="cursor-pointer">
                 <StatCard
-                  title="عدد الأصناف المباعة"
+                  title="أصناف مباعة"
                   value={todayItems.toString()}
                   icon={<Box className="w-5 h-5 text-purple-600" />}
                   subtext="اضغط للتفاصيل"
                 />
               </div>
               <StatCard
-                title="عدد المنتجات"
+                title="المنتجات"
                 value={products.length.toString()}
                 icon={<Package className="w-5 h-5 text-orange-600" />}
-                subtext={`${lowStockProducts.length} منخفض المخزون`}
+                subtext={`${lowStockProducts.length} منخفض`}
               />
+              <div onClick={() => setShowExpensesModal(true)} className="cursor-pointer">
+                <StatCard
+                  title="مصروفات اليوم"
+                  value={formatCurrency(todayExpensesTotal)}
+                  icon={<Wallet className="w-5 h-5 text-red-600" />}
+                  subtext="اضغط للإدارة"
+                />
+              </div>
+              <div onClick={() => setShowDailyStatsModal(true)} className="cursor-pointer">
+                <StatCard
+                  title="اليومية"
+                  value={`${monthlyDailyStats.length} يوم`}
+                  icon={<CalendarDays className="w-5 h-5 text-indigo-600" />}
+                  subtext="إحصائيات الشهر"
+                />
+              </div>
             </div>
 
-            {/* Recent Invoices */}
+            {/* Today's Sales Table */}
             <Card className="border-gray-200">
-              <CardHeader className="flex flex-row items-center justify-between">
+              <CardHeader className="flex flex-row items-center justify-between pb-3">
                 <div>
-                  <CardTitle>آخر المبيعات</CardTitle>
-                  <CardDescription>أحدث عمليات البيع</CardDescription>
+                  <CardTitle className="flex items-center gap-2">
+                    <Receipt className="w-5 h-5" />
+                    مبيعات اليوم - {new Date().toLocaleDateString('ar-EG', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' })}
+                  </CardTitle>
                 </div>
                 <Link href="/sales">
                   <Button variant="ghost" size="sm">
@@ -324,36 +494,127 @@ export default function HomePage() {
                 </Link>
               </CardHeader>
               <CardContent>
-                {invoices.length === 0 ? (
-                  <p className="text-center text-gray-500 py-8">لا توجد مبيعات بعد</p>
+                {todayInvoicesList.length === 0 ? (
+                  <p className="text-center text-gray-500 py-8">لا توجد مبيعات اليوم بعد</p>
                 ) : (
-                  <div className="space-y-3">
-                    {[...invoices]
-                      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-                      .slice(0, 5)
-                      .map((invoice) => (
-                      <div
-                        key={invoice.id}
-                        className="flex items-center justify-between p-3 bg-gray-50 rounded-lg"
-                      >
-                        <div>
-                          <p className="text-sm text-gray-500">
-                            {formatDate(invoice.createdAt)}
-                          </p>
-                          <p className="text-xs text-gray-400">
-                            {invoice.items.length} صنف • {invoice.items.reduce((s, i) => s + i.quantity, 0)} قطعة
-                          </p>
-                        </div>
-                        <div className="text-left">
-                          <p className="font-bold text-gray-800">{formatCurrency(invoice.total)}</p>
-                          <p className="text-sm text-gray-500">
-                            {invoice.paymentMethod === 'cash' ? 'نقدي' : 'بطاقة'}
-                          </p>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-sm">
+                      <thead>
+                        <tr className="border-b border-gray-200 bg-gray-50">
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">#</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">الوقت</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">الأصناف</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">الإجمالي</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">الخصم</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">صافي الربح</th>
+                          <th className="text-right py-3 px-3 font-medium text-gray-600">الدفع</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {todayInvoicesList.map((invoice, idx) => {
+                          const invoiceProfit = invoice.items.reduce(
+                            (s, item) => s + (item.unitPrice - item.costPrice) * item.quantity, 0
+                          ) - (invoice.discount || 0);
+                          return (
+                            <tr key={invoice.id} className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                              <td className="py-3 px-3 text-gray-500">{idx + 1}</td>
+                              <td className="py-3 px-3 text-gray-700">
+                                {new Date(invoice.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                              </td>
+                              <td className="py-3 px-3">
+                                <span className="text-gray-900">{invoice.items.length} صنف</span>
+                                <span className="text-gray-400 mx-1">•</span>
+                                <span className="text-gray-500">{invoice.items.reduce((s, i) => s + i.quantity, 0)} قطعة</span>
+                              </td>
+                              <td className="py-3 px-3 font-bold text-gray-900">{formatCurrency(invoice.total)}</td>
+                              <td className="py-3 px-3">
+                                {invoice.discount > 0 ? (
+                                  <span className="text-red-600">-{formatCurrency(invoice.discount)}</span>
+                                ) : (
+                                  <span className="text-gray-400">-</span>
+                                )}
+                              </td>
+                              <td className="py-3 px-3 font-medium text-green-600">{formatCurrency(invoiceProfit)}</td>
+                              <td className="py-3 px-3">
+                                <span className={cn(
+                                  'px-2 py-1 rounded-full text-xs font-medium',
+                                  invoice.paymentMethod === 'cash' ? 'bg-green-100 text-green-700' : 'bg-blue-100 text-blue-700'
+                                )}>
+                                  {invoice.paymentMethod === 'cash' ? 'نقدي' : 'بطاقة'}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                      <tfoot>
+                        <tr className="bg-gray-50 font-bold">
+                          <td colSpan={3} className="py-3 px-3 text-gray-700">المجموع ({todayInvoicesList.length} فاتورة)</td>
+                          <td className="py-3 px-3 text-gray-900">{formatCurrency(todayRevenue)}</td>
+                          <td className="py-3 px-3 text-red-600">
+                            -{formatCurrency(todayInvoicesList.reduce((s, inv) => s + (inv.discount || 0), 0))}
+                          </td>
+                          <td className="py-3 px-3 text-green-600">{formatCurrency(todayProfit)}</td>
+                          <td className="py-3 px-3"></td>
+                        </tr>
+                      </tfoot>
+                    </table>
                   </div>
                 )}
+              </CardContent>
+            </Card>
+
+            {/* Daily Stats for Current Month - Always Visible */}
+            <Card className="border-gray-200">
+              <CardHeader className="pb-3">
+                <CardTitle className="flex items-center gap-2">
+                  <CalendarDays className="w-5 h-5" />
+                  اليومية - {new Date().toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="overflow-x-auto">
+                  <table className="w-full text-sm">
+                    <thead>
+                      <tr className="border-b border-gray-200 bg-gray-50">
+                        <th className="text-right py-3 px-3 font-medium text-gray-600">اليوم</th>
+                        <th className="text-right py-3 px-3 font-medium text-gray-600">المبيعات</th>
+                        <th className="text-right py-3 px-3 font-medium text-gray-600">صافي الربح</th>
+                        <th className="text-right py-3 px-3 font-medium text-gray-600">الفواتير</th>
+                        <th className="text-right py-3 px-3 font-medium text-gray-600">الأصناف</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {monthlyDailyStats.map((day) => (
+                        <tr key={day.date} className={cn(
+                          "border-b border-gray-100 hover:bg-gray-50 transition-colors",
+                          day.date === new Date().toISOString().split('T')[0] && "bg-blue-50 font-medium"
+                        )}>
+                          <td className="py-3 px-3 text-gray-700">
+                            {day.date === new Date().toISOString().split('T')[0] ? (
+                              <span className="text-blue-600 font-bold">اليوم ({day.dayLabel})</span>
+                            ) : (
+                              day.dayLabel
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-medium text-gray-900">{formatCurrency(day.revenue)}</td>
+                          <td className="py-3 px-3 font-medium text-green-600">{formatCurrency(day.profit)}</td>
+                          <td className="py-3 px-3 text-gray-700">{day.invoiceCount}</td>
+                          <td className="py-3 px-3 text-gray-700">{day.items}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                    <tfoot>
+                      <tr className="bg-gray-100 font-bold">
+                        <td className="py-3 px-3 text-gray-700">إجمالي الشهر</td>
+                        <td className="py-3 px-3 text-gray-900">{formatCurrency(monthlyDailyStats.reduce((s, d) => s + d.revenue, 0))}</td>
+                        <td className="py-3 px-3 text-green-600">{formatCurrency(monthlyDailyStats.reduce((s, d) => s + d.profit, 0))}</td>
+                        <td className="py-3 px-3 text-gray-700">{monthlyDailyStats.reduce((s, d) => s + d.invoiceCount, 0)}</td>
+                        <td className="py-3 px-3 text-gray-700">{monthlyDailyStats.reduce((s, d) => s + d.items, 0)}</td>
+                      </tr>
+                    </tfoot>
+                  </table>
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -559,6 +820,151 @@ export default function HomePage() {
         </div>
       </Modal>
 
+      {/* Expenses Modal */}
+      <Modal
+        isOpen={showExpensesModal}
+        onClose={() => setShowExpensesModal(false)}
+        title="مصروفات اليوم"
+        size="lg"
+      >
+        <div className="space-y-4">
+          {/* Add Expense Form */}
+          <div className="p-4 bg-gray-50 rounded-lg border border-gray-200">
+            <h4 className="font-medium text-gray-900 mb-3">إضافة مصروف جديد</h4>
+            <div className="flex gap-3">
+              <div className="flex-1">
+                <Input
+                  placeholder="وصف المصروف (مثال: شراء بسكويت 5 قطع)"
+                  value={expenseDescription}
+                  onChange={(e) => setExpenseDescription(e.target.value)}
+                />
+              </div>
+              <div className="w-32">
+                <Input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  placeholder="المبلغ"
+                  value={expenseAmount}
+                  onChange={(e) => setExpenseAmount(e.target.value)}
+                />
+              </div>
+              <Button
+                onClick={async () => {
+                  if (expenseDescription.trim() && parseFloat(expenseAmount) > 0) {
+                    await addExpense(expenseDescription.trim(), parseFloat(expenseAmount));
+                    setExpenseDescription('');
+                    setExpenseAmount('');
+                  }
+                }}
+                disabled={!expenseDescription.trim() || !parseFloat(expenseAmount)}
+              >
+                <Plus className="w-4 h-4" />
+                إضافة
+              </Button>
+            </div>
+          </div>
+
+          {/* Expenses List */}
+          <div className="space-y-2 max-h-96 overflow-y-auto">
+            {expenses.length === 0 ? (
+              <div className="text-center py-8 text-gray-500">
+                <Wallet className="w-12 h-12 mx-auto mb-2 text-gray-300" />
+                <p>لا توجد مصروفات اليوم</p>
+              </div>
+            ) : (
+              expenses.map((expense) => (
+                <div
+                  key={expense.id}
+                  className="flex items-center justify-between p-4 bg-white rounded-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+                >
+                  <div className="flex-1">
+                    <p className="font-medium text-gray-900">{expense.description}</p>
+                    <p className="text-xs text-gray-500 mt-1">
+                      {new Date(expense.createdAt).toLocaleTimeString('ar-EG', { hour: '2-digit', minute: '2-digit' })}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-bold text-red-600">{formatCurrency(expense.amount)}</span>
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => removeExpense(expense.id)}
+                    >
+                      <Trash2 className="w-4 h-4 text-red-400" />
+                    </Button>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+
+          {/* Footer Total */}
+          {expenses.length > 0 && (
+            <div className="pt-4 border-t border-gray-200">
+              <div className="flex justify-between items-center">
+                <span className="font-medium text-gray-700">إجمالي المصروفات:</span>
+                <span className="text-xl font-bold text-red-600">{formatCurrency(todayExpensesTotal)}</span>
+              </div>
+              <p className="text-xs text-gray-500 mt-2">
+                * المصروفات للرؤية فقط ولا تؤثر على المخزون أو الأرباح. تُستخدم لتوثيق المصاريف عند تسليم الشيفت.
+              </p>
+            </div>
+          )}
+        </div>
+      </Modal>
+
+      {/* Daily Stats Modal (for mobile/expanded view) */}
+      <Modal
+        isOpen={showDailyStatsModal}
+        onClose={() => setShowDailyStatsModal(false)}
+        title={`اليومية - ${new Date().toLocaleDateString('ar-EG', { month: 'long', year: 'numeric' })}`}
+        size="lg"
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead>
+              <tr className="border-b border-gray-200 bg-gray-50">
+                <th className="text-right py-3 px-3 font-medium text-gray-600">اليوم</th>
+                <th className="text-right py-3 px-3 font-medium text-gray-600">المبيعات</th>
+                <th className="text-right py-3 px-3 font-medium text-gray-600">صافي الربح</th>
+                <th className="text-right py-3 px-3 font-medium text-gray-600">الفواتير</th>
+                <th className="text-right py-3 px-3 font-medium text-gray-600">الأصناف</th>
+              </tr>
+            </thead>
+            <tbody>
+              {monthlyDailyStats.map((day) => (
+                <tr key={day.date} className={cn(
+                  "border-b border-gray-100 hover:bg-gray-50 transition-colors",
+                  day.date === new Date().toISOString().split('T')[0] && "bg-blue-50 font-medium"
+                )}>
+                  <td className="py-3 px-3 text-gray-700">
+                    {day.date === new Date().toISOString().split('T')[0] ? (
+                      <span className="text-blue-600 font-bold">اليوم ({day.dayLabel})</span>
+                    ) : (
+                      day.dayLabel
+                    )}
+                  </td>
+                  <td className="py-3 px-3 font-medium text-gray-900">{formatCurrency(day.revenue)}</td>
+                  <td className="py-3 px-3 font-medium text-green-600">{formatCurrency(day.profit)}</td>
+                  <td className="py-3 px-3 text-gray-700">{day.invoiceCount}</td>
+                  <td className="py-3 px-3 text-gray-700">{day.items}</td>
+                </tr>
+              ))}
+            </tbody>
+            <tfoot>
+              <tr className="bg-gray-100 font-bold">
+                <td className="py-3 px-3 text-gray-700">إجمالي الشهر</td>
+                <td className="py-3 px-3 text-gray-900">{formatCurrency(monthlyDailyStats.reduce((s, d) => s + d.revenue, 0))}</td>
+                <td className="py-3 px-3 text-green-600">{formatCurrency(monthlyDailyStats.reduce((s, d) => s + d.profit, 0))}</td>
+                <td className="py-3 px-3 text-gray-700">{monthlyDailyStats.reduce((s, d) => s + d.invoiceCount, 0)}</td>
+                <td className="py-3 px-3 text-gray-700">{monthlyDailyStats.reduce((s, d) => s + d.items, 0)}</td>
+              </tr>
+            </tfoot>
+          </table>
+        </div>
+      </Modal>
+
       {/* Low Stock Products Modal */}
       <Modal
         isOpen={showLowStockModal}
@@ -657,11 +1063,130 @@ export default function HomePage() {
           </div>
         </div>
       </Modal>
+
+      {/* Change Password Modal */}
+      <Modal
+        isOpen={showChangePasswordModal}
+        onClose={() => {
+          setShowChangePasswordModal(false);
+          setOldPassword('');
+          setNewPassword('');
+          setConfirmNewPassword('');
+          setChangePasswordError('');
+          setChangePasswordSuccess(false);
+        }}
+        title="تغيير كلمة السر"
+        size="sm"
+      >
+        <div className="space-y-4">
+          {changePasswordSuccess ? (
+            <div className="text-center py-4">
+              <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <KeyRound className="w-8 h-8 text-green-600" />
+              </div>
+              <p className="text-lg font-bold text-green-700 mb-2">تم تغيير كلمة السر بنجاح ✅</p>
+              <p className="text-sm text-gray-500">أي جهاز تاني هيحتاج يسجل دخول بالكلمة الجديدة</p>
+              <Button
+                className="mt-4"
+                onClick={() => {
+                  setShowChangePasswordModal(false);
+                  setChangePasswordSuccess(false);
+                }}
+              >
+                تم
+              </Button>
+            </div>
+          ) : (
+            <>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">كلمة السر الحالية</label>
+                <input
+                  type="password"
+                  value={oldPassword}
+                  onChange={(e) => { setOldPassword(e.target.value); setChangePasswordError(''); }}
+                  placeholder="••••••••"
+                  className="w-full h-11 px-4 text-sm border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">كلمة السر الجديدة</label>
+                <input
+                  type="password"
+                  value={newPassword}
+                  onChange={(e) => { setNewPassword(e.target.value); setChangePasswordError(''); }}
+                  placeholder="••••••••"
+                  className="w-full h-11 px-4 text-sm border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-1.5">تأكيد كلمة السر الجديدة</label>
+                <input
+                  type="password"
+                  value={confirmNewPassword}
+                  onChange={(e) => { setConfirmNewPassword(e.target.value); setChangePasswordError(''); }}
+                  placeholder="••••••••"
+                  className="w-full h-11 px-4 text-sm border border-gray-300 rounded-xl bg-gray-50 focus:bg-white focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-500/20"
+                />
+              </div>
+
+              {changePasswordError && (
+                <div className="p-3 bg-red-50 border border-red-200 rounded-xl text-sm text-red-700 text-center">
+                  {changePasswordError}
+                </div>
+              )}
+
+              <Button
+                className="w-full"
+                onClick={async () => {
+                  if (!oldPassword || !newPassword || !confirmNewPassword) {
+                    setChangePasswordError('ادخل كل الحقول');
+                    return;
+                  }
+                  if (newPassword.length < 4) {
+                    setChangePasswordError('كلمة السر لازم تكون 4 حروف على الأقل');
+                    return;
+                  }
+                  if (newPassword !== confirmNewPassword) {
+                    setChangePasswordError('كلمة السر الجديدة مش متطابقة');
+                    return;
+                  }
+                  try {
+                    const res = await fetch('/api/auth', {
+                      method: 'POST',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ action: 'change', oldPassword, password: newPassword }),
+                    });
+                    const data = await res.json();
+                    if (data.success && data.token) {
+                      localStorage.setItem('kstore_auth_token', data.token);
+                      // Update cached hash for offline login
+                      try {
+                        const { clientHashPassword } = await import('@/components/auth/AuthProvider');
+                        const hash = await clientHashPassword(newPassword);
+                        localStorage.setItem('kstore_cached_hash', hash);
+                      } catch {}
+                      setOldPassword('');
+                      setNewPassword('');
+                      setConfirmNewPassword('');
+                      setChangePasswordSuccess(true);
+                    } else {
+                      setChangePasswordError(data.error || 'حصل خطأ');
+                    }
+                  } catch {
+                    setChangePasswordError('خطأ في الاتصال بالسيرفر');
+                  }
+                }}
+              >
+                <KeyRound className="w-4 h-4" />
+                تغيير كلمة السر
+              </Button>
+            </>
+          )}
+        </div>
+      </Modal>
     </div>
   );
 }
-
-// Tab Button Component
 function TabButton({
   active,
   onClick,
